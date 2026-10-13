@@ -1,0 +1,22 @@
+name: size-alarm
+
+# Every change: warn at 100 MB, fail at 500 MB, and fail if a Word file, PDF, photo, zip or oversize file is anywhere
+# in the repository or its history.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  size-alarm:
+    name: size-alarm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Size and file-type check
+        run: python tools/size_alarm.py
