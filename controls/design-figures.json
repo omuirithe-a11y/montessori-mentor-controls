@@ -1,5 +1,5 @@
 {
- "about": "The design figures from START-HERE (all spaces letters to letters). A figure is only CHECKED once its page selectors are filled in and status is 'mapped'. Until then it is reported NOT CHECKED, never passed. Mapping needs one real page file from the template.",
+ "about": "The design figures from START-HERE (all spaces letters to letters). A figure is only CHECKED once its page selectors are filled in and status is 'mapped'. Until then it is reported NOT CHECKED, never passed. Mapping needs one real page file from the template. Numbers are expected to change as pages are edited; every figure carries last_changed (owner's edits of 13 Oct 2026, 20:40 Beijing). A numbers-only template is planned for 14 Oct 2026.",
  "block_preview_if_unmapped": false,
  "figures": [
   {
@@ -26,20 +26,22 @@
    "status": "pending",
    "above": null,
    "below": null,
-   "selector": null
+   "selector": null,
+   "last_changed": "2026-10-13"
   },
   {
    "id": 3,
    "group": "page",
-   "text": "Navy footer band 60 above and below; footer quotation and attribution 18px",
+   "text": "Navy footer band 40 above and below; footer quotation and attribution 18px",
    "kind": "gap",
-   "expected": 60,
+   "expected": 40,
    "tolerance": 0,
    "viewport": "desktop",
    "status": "pending",
    "above": null,
    "below": null,
-   "selector": null
+   "selector": null,
+   "last_changed": "2026-10-13"
   },
   {
    "id": 4,
@@ -83,80 +85,95 @@
   {
    "id": 7,
    "group": "spaces",
-   "text": "Between paragraphs 25",
+   "text": "Between paragraphs 20",
    "kind": "gap",
-   "expected": 25,
+   "expected": 20,
    "tolerance": 0,
    "viewport": "desktop",
    "status": "pending",
    "above": null,
    "below": null,
-   "selector": null
+   "selector": null,
+   "last_changed": "2026-10-13"
   },
   {
    "id": 8,
    "group": "spaces",
-   "text": "Under a blue heading 25; above a blue heading 28; heading under heading 28",
+   "text": "Under a heading 20; above a heading 30, including a heading directly under another heading",
    "kind": "gap",
-   "expected": 25,
+   "expected": 20,
    "tolerance": 0,
    "viewport": "desktop",
    "status": "pending",
    "above": null,
    "below": null,
-   "selector": null
+   "selector": null,
+   "also_expected": {
+    "above": 30
+   },
+   "last_changed": "2026-10-13"
   },
   {
    "id": 9,
    "group": "spaces",
-   "text": "Bold sub-heading: 30 above, 14 to its text",
+   "text": "Bold sub-heading: 30 above, 12 to its text",
    "kind": "gap",
-   "expected": 14,
+   "expected": 12,
    "tolerance": 0,
    "viewport": "desktop",
    "status": "pending",
    "above": null,
    "below": null,
-   "selector": null
+   "selector": null,
+   "also_expected": {
+    "above": 30
+   },
+   "last_changed": "2026-10-13"
   },
   {
    "id": 10,
    "group": "spaces",
-   "text": "List lines 14 apart; 30 above and below a list",
+   "text": "List lines 15 apart; 30 above and below a list; a one-line list that finishes its sentence 14 above",
    "kind": "gap",
-   "expected": 14,
+   "expected": 15,
    "tolerance": 0,
    "viewport": "desktop",
    "status": "pending",
    "above": null,
    "below": null,
-   "selector": null
+   "selector": null,
+   "last_changed": "2026-10-13"
   },
   {
    "id": 11,
    "group": "spaces",
-   "text": "Quotations 18px, lines 20 apart; 25 into and out of a quotation; indent one tab (48)",
+   "text": "Quotations 18px, lines 23 apart; 25 into and out of a quotation; indent one tab (48)",
    "kind": "gap",
-   "expected": 25,
+   "expected": 23,
    "tolerance": 0,
    "viewport": "desktop",
    "status": "pending",
    "above": null,
    "below": null,
-   "selector": null
+   "selector": null,
+   "also_expected": {
+    "into_and_out_of": 25
+   },
+   "last_changed": "2026-10-13"
   },
   {
    "id": 12,
    "group": "spaces",
-   "text": "Rows of photos 40 above and below (30 beside a beige line)",
+   "text": "Rows of photos 30 above and below",
    "kind": "gap",
-   "expected": 40,
+   "expected": 30,
    "tolerance": 0,
    "viewport": "desktop",
    "status": "pending",
    "above": null,
    "below": null,
-   "selector": null
+   "selector": null,
+   "last_changed": "2026-10-13"
   },
   {
    "id": 13,
