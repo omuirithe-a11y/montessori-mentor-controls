@@ -1,7 +1,6 @@
 {
   "version": 1,
   "about": "Settings for the automatic checks. Plain-English explanation: docs/PREVIEW-FOR-YOU.md",
-
   "search_scope": "turn",
   "required_places": [
     "Files",
@@ -30,50 +29,97 @@
     "not linked to this computer",
     "blocked by a control"
   ],
-
   "max_blocks_per_reply": 5,
-
   "forbidden_extensions": [
-    ".docx", ".doc", ".dotx", ".pdf", ".pptx", ".xlsx", ".zip", ".tar", ".gz", ".7z",
-    ".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".jp2", ".tif", ".tiff", ".psd",
-    ".mp4", ".mov", ".mp3", ".wav"
+    ".docx",
+    ".doc",
+    ".dotx",
+    ".pdf",
+    ".pptx",
+    ".xlsx",
+    ".zip",
+    ".tar",
+    ".gz",
+    ".7z",
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".gif",
+    ".webp",
+    ".heic",
+    ".jp2",
+    ".tif",
+    ".tiff",
+    ".psd",
+    ".mp4",
+    ".mov",
+    ".mp3",
+    ".wav"
   ],
   "max_file_bytes": 1000000,
   "repo_warn_bytes": 100000000,
   "repo_block_bytes": 500000000,
-
   "original_extensions": [
-    ".docx", ".doc", ".dotx", ".pdf", ".pptx", ".xlsx",
-    ".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".jp2", ".tif", ".tiff", ".psd"
+    ".docx",
+    ".doc",
+    ".dotx",
+    ".pdf",
+    ".pptx",
+    ".xlsx",
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".gif",
+    ".webp",
+    ".heic",
+    ".jp2",
+    ".tif",
+    ".tiff",
+    ".psd"
   ],
-  "work_copy_folder_names": ["work", "copy", "copies", "preview", "previews"],
-
-  "protected_control_paths": [".claude/", "controls/", "tools/", "tests/", ".github/", "CLAUDE.md"],
-  "locked_paths": [".session/", ".claude/settings.local.json"],
-
+  "work_copy_folder_names": [
+    "work",
+    "copy",
+    "copies",
+    "preview",
+    "previews"
+  ],
+  "protected_control_paths": [
+    ".claude/",
+    "controls/",
+    "tools/",
+    "tests/",
+    ".github/",
+    "CLAUDE.md"
+  ],
+  "locked_paths": [
+    ".session/",
+    ".claude/settings.local.json"
+  ],
   "publish_tool_name_regex": "(?i)(hostinger|ftp|deploy|wordpress|wp_)",
   "publish_bash_regex": "(?i)(\\b(sftp|scp|ftp|lftp|rsync)\\b|\\bwp\\s+(plugin|theme|post|media)\\b|\\bgh\\s+(release|workflow\\s+run|pages)\\b|curl[^|;&]*\\s(-T|--upload-file|-F|--form)\\b)",
   "hostinger_words_regex": "(?i)hostinger",
   "hostinger_with_regex": "(?i)(\\b(scp|sftp|ftp|rsync|curl|wget|ssh|upload)\\b)",
-
   "push_words_regex": "(?i)\\b(github|push|commit|pull request|PR)\\b",
   "go_regex": "(?i)^\\s*go[\\s.!]*$",
-
   "gate_exempt_tools_regex": "^(Read|Glob|Grep|WebSearch|WebFetch|ToolSearch|TaskCreate|TaskUpdate|TaskList|TaskGet|SendUserMessage|AskUserQuestion|Skill)$",
-
   "read_tool_name_regex": "(?i)(get|list|read|search|query|find|fetch|describe|preview|status|check|current_time|location|weather|display|show|inline_preview|summarize|properties|metadata|details|styles|recommend|palette|suggest)",
   "change_tool_name_regex": "(?i)(create|update|delete|trash|share|write|send|commit|publish|upload|add_|_add|set_|batch|move|copy|put|post|fire|remove|rename|save|append|replace|str_replace|invite|migrate|finalize|initialize|activate|render|export|convert|merge|fill|apply|adjust|crop|vectorize|animate|generate|combine|compress|split|rotate|redact|reorder|organize)",
-
   "claim_words_regex": "(?i)\\b(checked|verified|confirmed|matches|matched|measured|tested|looked at|all done|is done|are done|completed?|fixed|passes|passed)\\b",
-
   "start_here": {
-    "drive_file_id": "1GsScj1bx_Jlf93pkLixi81VFaM4pGLB4",
     "copy_path": "controls/START-HERE.md",
-    "meta_path": "controls/START-HERE.meta.json"
+    "note": "START-HERE lives in this repository only. It is not kept in Google Drive."
   },
-  "context_files": ["controls/START-HERE.md", "controls/PROJECT-INSTRUCTIONS.md"],
-
-  "measure_mode": "ink_to_ink",
-  "measure_mode_options": ["ink_to_ink", "baseline_to_capheight"],
-  "measure_mode_confirmed_by_user": false
+  "context_files": [
+    "controls/START-HERE.md",
+    "controls/PROJECT-INSTRUCTIONS.md"
+  ],
+  "measure_mode": "baseline_to_capheight",
+  "measure_mode_options": [
+    "ink_to_ink",
+    "baseline_to_capheight"
+  ],
+  "measure_mode_confirmed_by_user": true,
+  "measure_mode_note": "Owner's definition, 13 Oct 2026: letters to letters = the line the letters sit on to the top of the capitals below.",
+  "baseline_tolerance_px": 0.5
 }

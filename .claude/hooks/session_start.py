@@ -80,7 +80,8 @@ except Exception:
     pass
 
 st["tampered"] = bool(problems)
-st["start_here_status"] = "not checked"
+sh_path = root / cfg["start_here"]["copy_path"]
+st["start_here_status"] = "loaded" if (sh_path.is_file() and sh_path.stat().st_size > 0) else "missing"
 st["integrity_problems"] = problems
 save_state(sid, st)
 append_log(sid, {"turn": st.get("turn", 0), "event": "session_start", "source": ev.get("source"),
@@ -93,8 +94,7 @@ if problems:
                  + "\nNo change to anything is allowed until the owner restores the approved version.")
 else:
     parts.append("The automatic checks are intact and switched on." + (" " + " ".join(notes) if notes else ""))
-parts.append("FIRST STEP: read START-HERE.md in Google Drive (file id " + cfg["start_here"]["drive_file_id"]
-             + ") with the Drive read tool. The copy below must match it. Nothing can be changed until that read has matched.")
+parts.append("START-HERE.md is loaded below. It is the master copy and lives in this repository (controls/START-HERE.md). It is not kept in Google Drive.")
 for rel_path in cfg["context_files"]:
     p = root / rel_path
     if p.exists():

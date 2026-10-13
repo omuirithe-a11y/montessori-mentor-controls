@@ -102,19 +102,15 @@ def push_words_given() -> bool:
 
 # ------------------------------------------------------------------ gates for any change
 def gate_for_change(control=False):
-    """Search before acting, START-HERE verified, controls intact."""
+    """Search before acting, START-HERE present, controls intact."""
     if st.get("tampered") and not control:
         deny("Not allowed: the automatic checks found that their own files were changed. "
              "Stop and tell the owner in plain English. Nothing can be changed until the owner restores them.")
-    if st.get("start_here_status") == "MISMATCH":
-        deny("Not allowed: START-HERE in Google Drive differs from the copy in this repository. "
-             "Tell the owner in plain English and wait for the owner's decision.")
+    sh_path = project_dir() / cfg["start_here"]["copy_path"]
+    if not (sh_path.is_file() and sh_path.stat().st_size > 0):
+        deny("Not allowed: START-HERE (controls/START-HERE.md) is missing or empty. "
+             "Tell the owner in plain English. Nothing can be changed until it is restored.")
     declared = read_declared(sid)
-    drive_declared = any(d.get("place") == "Google Drive" for d in declared)
-    if st.get("start_here_status") != "match" and not drive_declared:
-        deny("Not allowed yet: START-HERE has not been read from Google Drive in this session. "
-             "Read it (file id " + cfg["start_here"]["drive_file_id"] + ") with the Google Drive read tool. "
-             "If Google Drive is not offered in this session, record that with: python3 tools/declare.py \"Google Drive\" \"not offered in this session\"")
     log = read_log(sid)
     scope = cfg.get("search_scope", "turn")
     use = (lambda r: r.get("turn") == turn) if scope == "turn" else (lambda r: True)
