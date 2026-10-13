@@ -1,2 +1,2 @@
 # montessori-mentor-controls
-Control Claude the cunt
+Automatic checks for Montessori Mentor
