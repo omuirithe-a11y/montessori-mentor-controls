@@ -58,3 +58,4 @@ Lasting preferences (colours, dashes, photos, Hostinger, links, menu, footer) ar
 10. If something is blocked or refused, I stop and tell you; I don't find another way.
 11. If you ask a question, I answer it and change nothing.
 12. Always check by asking which are headings and which are sub headings.
+13. Your originals (Word files, PDFs, photos) are never edited; I work on copies.
