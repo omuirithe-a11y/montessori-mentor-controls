@@ -1,5 +1,5 @@
 {
- "about": "The design figures from START-HERE (all spaces letters to letters). A figure is only CHECKED once its page selectors are filled in and status is 'mapped'. Until then it is reported NOT CHECKED, never passed. Mapping needs one real page file from the template. Numbers are expected to change as pages are edited; every figure carries last_changed (owner's edits of 13 Oct 2026, 20:40 Beijing). A numbers-only template is planned for 14 Oct 2026.",
+ "about": "The design figures from START-HERE (all spaces letters to letters). A figure is only CHECKED once its page selectors are filled in and status is 'mapped'. Until then it is reported NOT CHECKED, never passed. Mapping needs one real page file from the template. Numbers are expected to change as pages are edited; every figure carries last_changed (owner's edits of 13 Oct 2026, 20:40 Beijing). A numbers-only template is planned for 14 Oct 2026. Measuring uses the owner's definition: the line the letters sit on to the top of the capitals below. Readings within half a pixel of a figure pass (baseline_tolerance_px in config.json).",
  "block_preview_if_unmapped": false,
  "figures": [
   {
@@ -240,5 +240,9 @@
    "below": null,
    "selector": null
   }
+ ],
+ "required_fonts": [
+  "EB Garamond",
+  "Vollkorn"
  ]
 }

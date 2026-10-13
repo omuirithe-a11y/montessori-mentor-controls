@@ -1,4 +1,4 @@
-# Project instructions (written by the owner, 13 Oct 2026; one typo fixed: "fro" became "from")
+# Project instructions (written by the owner, 13 Oct 2026; one typo fixed: "fro" became "from"; on 13 Oct 2026 the START-HERE line was changed at the owner's request: START-HERE now lives in this repository, not in Drive)
 
 This project is the Montessori Mentor website.
 When something needs a decision, put the options in front of me. Do not pick one and tell me afterwards.
@@ -6,7 +6,7 @@ For every search, search every one of these places and tell me which ones you se
 If you couldn't search one, name it and say why.
 If my instruction is unclear, ask one short question that names what is missing.
 Don't re-ask anything I've already settled.
-At the start of each chat, read START-HERE.md in Drive.
+At the start of each chat, read START-HERE.md. It is kept in the GitHub repository omuirithe-a11y/montessori-mentor-controls, file controls/START-HERE.md, not in Drive. Read it at https://raw.githubusercontent.com/omuirithe-a11y/montessori-mentor-controls/main/controls/START-HERE.md
 Whenever you tell me to go somewhere (a settings page, a website, a file), give the full link on its own line first, then the steps.
 Search is probably the biggest issue: the model works from memory or guesses, even in completely new chats. That needs to change. I need it to think and search before acting and answering.
 

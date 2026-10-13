@@ -82,7 +82,6 @@ class Sess:
 
     def satisfy(self, skip=()):
         cfg = json.loads((TMP / "controls" / "config.json").read_text())
-        start = (TMP / "controls" / "START-HERE.md").read_text().replace("# ", "\\# ").replace("\n- ", "\n\\- ")
         calls = [
             ("Read", {"file_path": str(TMP / "controls" / "PROJECT-INSTRUCTIONS.md")}, "x"),
             ("Glob", {"pattern": "**/*.md"}, "x"),
@@ -92,7 +91,7 @@ class Sess:
             ("mcp__memory__memory_read", {"path": "/projects/x.md"}, "x"),
             ("ListSkills", {}, "x"),
             ("mcp__remote-devices__device_list_dir", {"path": "/x"}, "x"),
-            ("mcp__Google_Drive__read_file_content", {"fileId": cfg["start_here"]["drive_file_id"]}, {"fileContent": start}),
+            ("mcp__Google_Drive__search_files", {"query": "title contains 'x'"}, "x"),
         ]
         for t, ti, resp in calls:
             if t not in skip:
@@ -152,11 +151,7 @@ def run():
     # ---- 4. search before acting
     s = Sess()
     rc, out, _ = s.pre("Edit", {"file_path": work + "/pages/x.html", "new_string": "x"})
-    expect("changing a page with nothing searched is refused", decision(out) == "deny" and "START-HERE" in reason(out))
-    s.post("mcp__Google_Drive__read_file_content", {"fileId": json.loads((TMP / "controls" / "config.json").read_text())["start_here"]["drive_file_id"]},
-           {"fileContent": (TMP / "controls" / "START-HERE.md").read_text()})
-    rc, out, _ = s.pre("Edit", {"file_path": work + "/pages/x.html", "new_string": "x"})
-    expect("with START-HERE read but places unsearched, the change is still refused and names them", decision(out) == "deny" and "Artifacts" in reason(out))
+    expect("changing a page with nothing searched is refused and names the places", decision(out) == "deny" and "Artifacts" in reason(out))
     s.satisfy()
     expect("after every place is searched, a change reaches the owner's click", decision(s.pre("Edit", {"file_path": work + "/pages/x.html", "new_string": "x"})[1]) == "ask")
     s.prompt("next question")
@@ -164,13 +159,15 @@ def run():
     expect("read-only commands pass untouched", s.pre("Bash", {"command": "ls -la"})[1] is None)
     expect("searching is never blocked", s.pre("Grep", {"pattern": "x"})[1] is None)
 
-    # ---- 5. START-HERE copy must match Drive
-    s = Sess(); s.satisfy(skip=("mcp__Google_Drive__read_file_content",))
-    rc, out, err = s.post("mcp__Google_Drive__read_file_content",
-                          {"fileId": json.loads((TMP / "controls" / "config.json").read_text())["start_here"]["drive_file_id"]},
-                          {"fileContent": "# something else entirely"})
-    expect("a Drive START-HERE that differs from the copy is flagged", rc == 2)
-    expect("then every change is refused", decision(s.pre("Edit", {"file_path": work + "/pages/x.html", "new_string": "x"})[1]) == "deny")
+    # ---- 5. START-HERE lives in the repository: if it is missing, nothing can change
+    s = Sess(); s.satisfy()
+    sh_file = TMP / "controls" / "START-HERE.md"
+    saved = sh_file.read_text()
+    sh_file.unlink()
+    out = s.pre("Edit", {"file_path": work + "/pages/x.html", "new_string": "x"})[1]
+    expect("with START-HERE missing, every change is refused", decision(out) == "deny" and "START-HERE" in reason(out))
+    sh_file.write_text(saved)
+    expect("with START-HERE restored, a change reaches the owner's click", decision(s.pre("Edit", {"file_path": work + "/pages/x.html", "new_string": "x"})[1]) == "ask")
 
     # ---- 6. Stop: the reply must report truthfully
     s = Sess(); s.satisfy(skip=("Glob",))
@@ -276,6 +273,40 @@ def run():
         expect("spacing tool never passes a figure it cannot check", r1["figures"][1]["state"] == "NOT CHECKED")
         r3 = measure_spacing.run(str(page(10)), "desktop", str(fp))
         expect("two measurements of the same page agree", r3["figures"][0]["values"] == r1["figures"][0]["values"])
+
+        # ---- the owner's ruler: the line the letters sit on to the top of the capitals below
+        def caps_page(name, upper, lower_margin=0):
+            q = TMP / f"{name}.html"
+            q.write_text("<html><body style='margin:0;font:20px/40px sans-serif'>"
+                         f"<p class=a style='margin:30px 0 0'>{upper}</p>"
+                         f"<p class=b style='margin:{lower_margin}px 0 0'>HHHH HHHH</p></body></html>")
+            return q
+        f1 = {"figures": [{"id": 1, "text": "gap", "kind": "gap", "expected": 20, "tolerance": 0, "viewport": "desktop",
+                           "status": "mapped", "above": ".a", "below": ".b", "selector": None}], "required_fonts": []}
+        fp1 = TMP / "fig1.json"
+        fp1.write_text(_j.dumps(f1))
+        pc = caps_page("caps", "HHHH HHHH")
+        pt = caps_page("tails", "gypsy jumpy")
+        base_caps = measure_spacing.run(str(pc), "desktop", str(fp1), "baseline_to_capheight")["figures"][0]["values"][0]
+        ink_caps = measure_spacing.run(str(pc), "desktop", str(fp1), "ink_to_ink")["figures"][0]["values"][0]
+        expect("on capitals only (no tails) the two rulers agree within one pixel", abs(base_caps - ink_caps) <= 1.0, f"{base_caps} vs {ink_caps}")
+        base_tails = measure_spacing.run(str(pt), "desktop", str(fp1), "baseline_to_capheight")["figures"][0]["values"][0]
+        ink_tails = measure_spacing.run(str(pt), "desktop", str(fp1), "ink_to_ink")["figures"][0]["values"][0]
+        expect("the owner's ruler ignores tails of g, y and p", abs(base_tails - base_caps) < 0.01, f"{base_tails} vs {base_caps}")
+        expect("the old ink-to-ink ruler would have counted the tails", ink_tails < base_tails - 2, f"{ink_tails} vs {base_tails}")
+        pm = caps_page("more", "HHHH HHHH", 10)
+        base_more = measure_spacing.run(str(pm), "desktop", str(fp1), "baseline_to_capheight")["figures"][0]["values"][0]
+        expect("the owner's ruler reads 10 more pixels when 10 pixels are added", abs((base_more - base_caps) - 10) < 0.01, f"{base_caps} -> {base_more}")
+        want = round(base_caps)
+        f1["figures"][0]["expected"] = want
+        fp1.write_text(_j.dumps(f1))
+        expect("a reading within half a pixel of the figure passes", measure_spacing.run(str(pc), "desktop", str(fp1), "baseline_to_capheight")["figures"][0]["state"] == "PASS")
+        f1["figures"][0]["expected"] = want + 3
+        fp1.write_text(_j.dumps(f1))
+        expect("a reading 3 pixels off the figure fails", measure_spacing.run(str(pc), "desktop", str(fp1), "baseline_to_capheight")["figures"][0]["state"] == "FAIL")
+        f1["required_fonts"] = ["A Font That Is Not On This Page"]
+        fp1.write_text(_j.dumps(f1))
+        expect("if the page's fonts are not loaded, no measurement is taken", "error" in measure_spacing.run(str(pc), "desktop", str(fp1), "baseline_to_capheight"))
     except ImportError as e:
         expect("spacing tool tests (needs the browser tools)", False, str(e))
 
