@@ -1,5 +1,9 @@
 """Runs the spacing and wording checks on a page. Only if nothing failed does it issue the receipt
-that lets the page be sent as a preview. Usage: python3 tools/preview_gate.py <page.html> <source.docx|.txt|.md>"""
+that lets the page be sent as a preview. Usage: python3 tools/preview_gate.py <page.html> <source.docx|.txt|.md>
+
+14 Oct 2026, the owner's decision (a): the wording check reports, it does not block. Every word on the page that
+differs from the Word text is printed here and kept in the receipt, and the reply must list them. A spacing failure
+still blocks the preview."""
 import hashlib
 import json
 import subprocess
@@ -31,8 +35,7 @@ for vp in ("desktop", "phone"):
             unchecked.append(f"{vp} figure {r['id']}")
 
 diffs, na, nb = check_wording.compare(page.read_text(encoding="utf-8"), check_wording.source_text(source))
-if diffs:
-    problems.append(f"wording differs from the Word text in {len(diffs)} places (first: {diffs[0]['kind']} \"{diffs[0]['word']}\")")
+wording = [f"{d['kind']}: Word \"{d['word']}\" / page \"{d['page']}\" (after: ...{d['context']})" for d in diffs]
 
 if unchecked and figs.get("block_preview_if_unmapped"):
     problems.append("these figures could not be checked yet: " + ", ".join(sorted(set(unchecked))[:10]))
@@ -47,7 +50,13 @@ h = hashlib.sha256(page.read_bytes()).hexdigest()
 d = ROOT / ".session" / "receipts"
 d.mkdir(parents=True, exist_ok=True)
 (d / f"{h}.json").write_text(json.dumps({"page": str(page), "source": str(source), "ts": time.time(),
-                                         "not_checked": sorted(set(unchecked))}), encoding="utf-8")
-print("PREVIEW ALLOWED. Spacing and wording checks passed for this exact file.")
+                                         "not_checked": sorted(set(unchecked)), "wording_differences": wording}), encoding="utf-8")
+print("PREVIEW ALLOWED. The spacing check passed for this exact file.")
+if wording:
+    print(f"WORDING DIFFERS from the Word text in {len(wording)} places (list them in the reply):")
+    for w in wording:
+        print("  - " + w)
+else:
+    print("WORDING MATCHES the Word text word for word.")
 if unchecked:
     print("NOT CHECKED (say so in the reply): " + ", ".join(sorted(set(unchecked))))
