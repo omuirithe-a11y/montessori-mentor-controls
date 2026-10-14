@@ -85,8 +85,194 @@ def read_declared(session_id) -> list:
     return out
 
 
+def append_search(session_id, record: dict) -> None:
+    record = dict(record)
+    record["ts"] = round(time.time(), 1)
+    with open(state_dir(session_id) / "searches.jsonl", "a", encoding="utf-8") as f:
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+def read_searches(session_id) -> list:
+    p = state_dir(session_id) / "searches.jsonl"
+    out = []
+    if p.exists():
+        for line in p.read_text(encoding="utf-8").splitlines():
+            try:
+                out.append(json.loads(line))
+            except Exception:
+                pass
+    return out
+
+
+def load_settled() -> list:
+    """The owner's settled decisions (controls/settled.json). Missing or unreadable: an empty list."""
+    try:
+        p = project_dir() / load_config().get("settled_path", "controls/settled.json")
+        d = json.loads(p.read_text(encoding="utf-8"))
+        return [e for e in d.get("settled", []) if isinstance(e, dict) and e.get("words")]
+    except Exception:
+        return []
+
+
 def sha256_text(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8")).hexdigest()
+
+
+# ---------------------------------------------------------------- the owner's words: what a search must look for
+
+STOP_WORDS = set('''a an the and or but if then than that this these those there their they them it its is are was were be
+been being am do does did done have has had having can could will would shall should may might must not no nor of on
+in into onto at by for from to with without about over up down out off again further once here
+when where why how what which who whom whose all any both each few more most other some such only own same so too very
+just also as you your yours i me my we our us he she his her him one two three four five six seven eight nine ten
+yes ok okay please now new old get got make made let say said tell told ask asked question questions answer answers
+use used way ways thing things there's it's i'm you're don't didn't isn't aren't wasn't won't can't couldn't
+shouldn't wouldn't i'll you'll we'll i've you've we've i'd you'd let's whether still already ever every
+because while being within upon per via etc want wants wanted need needs needed like likes give gives going keep
+keeps thanks thank think know knows put give went come came take took see saw look looked something anything
+everything nothing someone anyone everyone really quite rather much many less least next back well
+good bad sure fine done able'''.split())
+
+CONTENT_WORD_CAP = 40
+
+
+def forms(w: str) -> set:
+    """A word and its other forms - plural / singular, -ed, -ing, -ly - so one spelling cannot hide another."""
+    w = w.lower()
+    out = {w}
+    if not re.search(r"[a-z]", w) or " " in w:
+        if "-" in w:
+            out |= {w.replace("-", " "), w.replace("-", "")}
+        return out
+    for suf in ("ing", "ed", "es", "s", "ly", "ies", "er", "ers"):
+        if w.endswith(suf) and len(w) - len(suf) >= 3:
+            stem = w[:-len(suf)]
+            out.add(stem)
+            if suf == "ies":
+                out.add(stem + "y")
+            if suf in ("ing", "ed") and len(stem) > 2 and stem[-1] == stem[-2]:
+                out.add(stem[:-1])
+    base = sorted(out, key=len)[0]
+    out |= {base + "s", base + "es", base + "ed", base + "ing"}
+    if "-" in w:
+        out |= {w.replace("-", " "), w.replace("-", "")}
+    return out
+
+
+def words_from(text: str):
+    """Every word a search must cover, taken from the owner's own words: (all terms, the content words).
+    Terms: quoted phrases, pairs of neighbouring content words, then every content word with its forms."""
+    text = text or ""
+    quoted = [q.strip() for pair in re.findall(r'"([^"]{3,})"|“([^”]{3,})”', text) for q in pair if q]
+    toks = re.findall(r"[A-Za-z0-9#][A-Za-z0-9#'/\-\.]*", text)
+    content = []
+    for t in toks:
+        t = t.strip("'.").lower()
+        if not t:
+            continue
+        if re.match(r"^#?\d+(\.\d+)*$", t) or (len(t) >= 3 and t not in STOP_WORDS and re.search(r"[a-z]", t)):
+            if t not in content:
+                content.append(t)
+        if len(content) >= CONTENT_WORD_CAP:
+            break
+    pairs = [f"{a} {b}" for a, b in zip(content, content[1:])]
+    terms = []
+    for t in quoted + pairs:
+        terms.append(t.lower())
+    for t in content:
+        terms.extend(sorted(forms(t)))
+    seen, out = set(), []
+    for t in terms:
+        if t and t not in seen:
+            seen.add(t)
+            out.append(t)
+    return out, content
+
+
+def normalise_quote(s: str) -> str:
+    """Lower case, letters and digits only, one space between words - so a quotation is matched by its words."""
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", (s or "").lower()).split())
+
+
+def covers(content: list, searched_content: list) -> bool:
+    """True when a search's words cover at least half of the message's content words."""
+    need = [c for c in content if c]
+    if not need:
+        return True
+    have = set(searched_content or [])
+    got = sum(1 for w in need if w in have or any(f in have for f in forms(w)))
+    return got * 2 >= len(need)
+
+
+def word_in(text: str, word: str) -> bool:
+    """A word, or any of its forms, or a phrase, present in the text."""
+    low = normalise_quote(text)
+    for f in forms(word) | {word.lower()}:
+        f = normalise_quote(f)
+        if f and re.search(r"(^|\s)" + re.escape(f) + r"(\s|$)", low):
+            return True
+    return False
+
+
+# ---------------------------------------------------------------- questions and settled decisions
+
+QUESTION_WH = r"(who|whom|whose|what|which|when|where|why|how|whether)"
+QUESTION_AUX = (r"(is|are|was|were|am|do|does|did|have|has|had|can|could|will|would|shall|should|may|might|must|need|ought|"
+                r"isn't|aren't|wasn't|weren't|don't|doesn't|didn't|haven't|hasn't|hadn't|can't|cannot|couldn't|won't|"
+                r"wouldn't|shan't|shouldn't|mightn't|mustn't|needn't)")
+QUESTION_SUBJ = r"(i|you|we|it|this|that|these|those|there|they|he|she|the|a|an|my|your|our|any|anything|everything|all|one)"
+QUESTION_INDIRECT = [
+    r"\btell me\b", r"\blet me know\b", r"\bsay (if|whether|which|when|what|so|go|the word|yes|no)\b", r"\bjust say\b",
+    r"\bi need (to know|from you|your)\b", r"\bi'?d like to know\b", r"\bi (wonder|am wondering|'m wondering)\b",
+    r"\b(can|could|would|will) you\b", r"\bdo you (want|prefer|mean|need|agree|like|wish)\b",
+    r"\bif you (want|prefer|meant|mean|like|'d like|would like|'d rather|would rather|agree|choose|decide|wish|need)\b",
+    r"\byour (call|choice|decision|answer|go|say|preference|pick)\b", r"\bup to you\b", r"\bover to you\b",
+    r"\bwaiting (on|for) (you|your)\b", r"\bplease confirm\b", r"\bplease advise\b", r"\bwhich (one|do you|would you)\b",
+    r"\b(shall|should|may|can) i\b", r"\bwant me to\b", r"\bwould you rather\b", r"\bor should i\b", r"\bor shall i\b",
+    r"\bor do you\b", r"\bany (thoughts|objections|preference|preferences)\b", r"\bhow about\b", r"\bwhat about\b",
+    r"\bis that (ok|okay|right|fine|correct|what you)\b",
+]
+QUESTION_OPTION = re.compile(r"^\s*([-*]\s*)?(\*\*)?(\(?[a-dA-D]\)|[A-D]:|option [a-d]\b)", re.I)
+
+
+def questions_in(text: str) -> list:
+    """Every sentence of the text that asks the owner something, in any of the ways English asks."""
+    t = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text or "")
+    t = re.sub(r"https?://\S+", " ", t)
+    found, seen = [], set()
+    for line in t.splitlines():
+        if QUESTION_OPTION.match(line):
+            s = line.strip()
+            if s not in seen:
+                seen.add(s)
+                found.append(s)
+        for s in re.split(r"(?<=[.!?])\s+", line):
+            s = s.strip(" *_>#-\t")
+            if len(s) <= 2 or s in seen:
+                continue
+            low = s.lower().strip(" \"'`(*_")
+            asks = ("?" in s or re.match(QUESTION_WH + r"\b", low) or re.match(QUESTION_AUX + r"\s+" + QUESTION_SUBJ + r"\b", low)
+                    or any(re.search(p, low) for p in QUESTION_INDIRECT))
+            if asks:
+                seen.add(s)
+                found.append(s)
+    return found
+
+
+def settled_matches(text: str, settled: list) -> list:
+    """The settled decisions a sentence touches. A decision has distinctive "words" (its subject) and helper words "also"
+    (figures, directions). It is touched when at least one distinctive word is present and two words in all are."""
+    out = []
+    for e in settled:
+        ws = [str(w) for w in e.get("words", []) if str(w).strip()]
+        also = [str(w) for w in e.get("also", []) if str(w).strip()]
+        if not ws:
+            continue
+        d = [w for w in ws if word_in(text, w)]
+        a = [w for w in also if word_in(text, w)]
+        if d and len(d) + len(a) >= 2:
+            out.append((e, d + a))
+    return out
 
 
 def normalise_markdown(s: str) -> str:
@@ -127,6 +313,13 @@ def bash_is_read_only(cmd: str) -> bool:
     return bool(segs) and all(READ_ONLY_CMD.match(s) for s in segs)
 
 
+SEARCH_TOOL_CMD = re.compile(r"""^\s*(cd\s+\S+\s*&&\s*)?python3?\s+(\"?\$CLAUDE_PROJECT_DIR\"?/|\./)?tools/search\.py(\s|$)""")
+
+
+def is_search_tool(cmd: str) -> bool:
+    return bool(SEARCH_TOOL_CMD.match(cmd or ""))
+
+
 def places_for(tool_name: str, tool_input: dict) -> list:
     """Which of the named places did this tool call look into? (Only reading calls count.)"""
     t = tool_name or ""
@@ -137,10 +330,19 @@ def places_for(tool_name: str, tool_input: dict) -> list:
         p += ["Files"]
         if re.search(r"(CLAUDE\.md|PROJECT-INSTRUCTIONS\.md)$", path):
             p += ["Project instructions"]
+        if re.search(r"(^|/)records/", path):
+            p += ["Records"]
         if re.search(r"(^|/)\.git/", path):
             p += ["Git history"]
     elif t in ("Glob", "Grep"):
         p += ["Files", "Working area (workspace)"]
+        if re.search(r"(^|/)records(/|$)", str(ti.get("path", ""))):
+            p += ["Records"]
+    elif t == "Bash" and is_search_tool(str(ti.get("command", ""))):
+        # tools/search.py reads every text file of the repository, the project instructions and the records folder
+        p += ["Files", "Working area (workspace)", "Project instructions"]
+        if (project_dir() / "records").is_dir():
+            p += ["Records"]
     elif t == "Bash" or t.endswith("device_bash"):
         cmd = str(ti.get("command", ""))
         if bash_is_read_only(cmd) or re.search(r"\b(grep|rg|find|ls|cat|tree)\b", cmd):

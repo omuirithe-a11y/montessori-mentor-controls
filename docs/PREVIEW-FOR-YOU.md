@@ -17,6 +17,19 @@ Written 13 October 2026. Nothing here is switched on yet. The checks sit in the 
 
 **5. Word for word.** The page text is compared with your Word text. Any added, missing or changed word is listed.
 
+## The search checks (your decision of 14 October 2026: "I want all of them")
+
+The old search rule proved a search ran, not that it was read. These six make the search run well, and they work in every Claude Code session opened on this repository. They cannot judge understanding; they make every search visible, every match unavoidable in the reply, and every settled answer un-askable.
+
+1. **The results must be used.** `python3 tools/search.py` searches every file of this repository and the records folder with the words of your message, and writes what it found to a log Claude cannot edit. The reply is refused unless it quotes, word for word, a matching line from every place where the search found a strong match (a line carrying two of your words, a phrase of yours, or a rare word of yours).
+2. **Settled answers are refused as questions.** Your decisions live in controls/settled.json, each with the words that name it. A reply that asks about one is refused and shown the answer. You can reopen one by raising it yourself.
+3. **The search words are yours.** The moment your message arrives, the check tells Claude the words to search for. The reply is refused if the search tool was not run on your message, or if Google Drive was searched without one of your words.
+4. **Found and not found must match the log.** A reply that says "nothing found" or "no record" while the log holds matches is refused and told which files match. A reply that says "START-HERE says" or "the records say" is refused unless that record was read or searched in the same reply.
+5. **A records folder.** records/ holds one record per session, written at the end of every session, and an index. The search reads it; nothing older than 14 October is carried forward.
+6. **The strongest match first.** A rare word of yours counts for more than a common one, and a line with several of your words comes before a line with one, so the answer is not buried.
+
+What they still cannot do: make Claude understand a match. A skipped, misdirected or ignored search now ends as a refused reply instead of a wrong answer to you.
+
 ## The protections that go with them
 
 - Nothing is uploaded or published unless you typed "go" in your last message. Even then, you get a click to approve. The "go" cannot be typed by Claude.
