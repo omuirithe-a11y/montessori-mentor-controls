@@ -22,7 +22,7 @@ Written 13 October 2026. Nothing here is switched on yet. The checks sit in the 
 - Nothing is uploaded or published unless you typed "go" in your last message. Even then, you get a click to approve. The "go" cannot be typed by Claude.
 - Your originals (Word files, PDFs, photos) cannot be edited, moved, deleted or overwritten. Google Drive files cannot be changed, trashed or shared.
 - "Save this" can never save to GitHub. Pushing to GitHub is refused unless your last message named it (push, commit or GitHub).
-- Every file change needs your click.
+- Changes to the checks themselves, and to any file outside this repository that is not in a work, copy or preview folder, need your click. Ordinary page edits (a file in the repository, or in a work, copy or preview folder) are left to Claude Code's own permission prompt, which in a cloud session is pre-approved. Changed on 14 Oct 2026 at your request.
 - Before any change, Claude must have searched the 12 places in your instructions in that same reply, and read START-HERE from Google Drive. A copy of START-HERE lives in this repository and is checked against the Drive version.
 - At the start of every session the checks check themselves. If any check file has been changed, or something tries to switch them off, everything is blocked and you are told.
 - If a check crashes or can't run, the action is blocked, never let through.

@@ -163,7 +163,12 @@ if tool in ("Edit", "Write", "NotebookEdit"):
             deny("Not allowed: this is larger than the " + str(cfg["max_file_bytes"] // 1000) + " KB limit for one file in this repository.")
     if is_control(path):
         change("Claude wants to change one of the automatic checks (" + rel(path) + "). Only approve if YOU asked for this change.", control=True)
-    change("Claude wants to change the file " + rel(path) + ". Approve only if you asked for this.")
+    gate_for_change()
+    if inside_root(path) or in_work_copy_folder(path):
+        # An ordinary file in the repository, or in a work, copy or preview folder: no decision here.
+        # Claude Code's own permission prompt decides (changed 14 Oct 2026 at the owner's request).
+        allow_silently()
+    ask("Claude wants to change the file " + rel(path) + ", which is outside the repository and outside any work, copy or preview folder. Approve only if you asked for this.")
 
 # ------------------------------------------------------------------ shell commands
 if tool == "Bash" or tool.endswith("device_bash"):
