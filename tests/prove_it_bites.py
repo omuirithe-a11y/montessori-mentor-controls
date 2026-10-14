@@ -153,7 +153,11 @@ def run():
     rc, out, _ = s.pre("Edit", {"file_path": work + "/pages/x.html", "new_string": "x"})
     expect("changing a page with nothing searched is refused and names the places", decision(out) == "deny" and "Artifacts" in reason(out))
     s.satisfy()
-    expect("after every place is searched, a change reaches the owner's click", decision(s.pre("Edit", {"file_path": work + "/pages/x.html", "new_string": "x"})[1]) == "ask")
+    expect("after every place is searched, an ordinary page edit is left to Claude Code's own prompt", decision(s.pre("Edit", {"file_path": work + "/pages/x.html", "new_string": "x"})[1]) is None)
+    expect("an edit to a page in the repository gives no decision", decision(s.pre("Edit", {"file_path": work + "/pages/x.html", "new_string": "x"})[1]) is None)
+    expect("an edit to a file in a work folder gives no decision", decision(s.pre("Edit", {"file_path": "/x/work/page.html", "new_string": "x"})[1]) is None)
+    expect("writing a file outside the repository and any work folder needs a click", decision(s.pre("Write", {"file_path": "/x/notes.txt", "content": "x"})[1]) == "ask")
+    expect("editing a control file still needs a click", decision(s.pre("Edit", {"file_path": work + "/controls/config.json", "new_string": "x"})[1]) == "ask")
     s.prompt("next question")
     expect("search must be repeated in the next reply", decision(s.pre("Edit", {"file_path": work + "/pages/x.html", "new_string": "x"})[1]) == "deny")
     expect("read-only commands pass untouched", s.pre("Bash", {"command": "ls -la"})[1] is None)
@@ -167,7 +171,7 @@ def run():
     out = s.pre("Edit", {"file_path": work + "/pages/x.html", "new_string": "x"})[1]
     expect("with START-HERE missing, every change is refused", decision(out) == "deny" and "START-HERE" in reason(out))
     sh_file.write_text(saved)
-    expect("with START-HERE restored, a change reaches the owner's click", decision(s.pre("Edit", {"file_path": work + "/pages/x.html", "new_string": "x"})[1]) == "ask")
+    expect("with START-HERE restored, an ordinary page edit goes through again", decision(s.pre("Edit", {"file_path": work + "/pages/x.html", "new_string": "x"})[1]) is None)
 
     # ---- 6. Stop: the reply must report truthfully
     s = Sess(); s.satisfy(skip=("Glob",))
