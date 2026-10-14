@@ -1,0 +1,22 @@
+{
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [ { "type": "command", "timeout": 60, "command": "sh \"${CLAUDE_PROJECT_DIR}/.claude/hooks/run.sh\" session_start" } ] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "command", "command": "sh \"${CLAUDE_PROJECT_DIR}/.claude/hooks/run.sh\" user_prompt" } ] }
+    ],
+    "PreToolUse": [
+      { "matcher": ".*", "hooks": [ { "type": "command", "timeout": 60, "command": "sh \"${CLAUDE_PROJECT_DIR}/.claude/hooks/run.sh\" pre_tool" } ] }
+    ],
+    "PostToolUse": [
+      { "matcher": ".*", "hooks": [ { "type": "command", "command": "sh \"${CLAUDE_PROJECT_DIR}/.claude/hooks/run.sh\" post_tool" } ] }
+    ],
+    "PostToolUseFailure": [
+      { "matcher": ".*", "hooks": [ { "type": "command", "command": "sh \"${CLAUDE_PROJECT_DIR}/.claude/hooks/run.sh\" post_tool" } ] }
+    ],
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "sh \"${CLAUDE_PROJECT_DIR}/.claude/hooks/run.sh\" stop" } ] }
+    ]
+  }
+}
