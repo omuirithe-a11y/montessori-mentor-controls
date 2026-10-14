@@ -61,13 +61,32 @@ def reason(out):
 
 
 class Sess:
-    def __init__(self, prompt="hello"):
+    def __init__(self, prompt="Hi."):
         self.sid = "t" + uuid.uuid4().hex[:8]
         self.base = {"session_id": self.sid}
         hook("user_prompt", dict(self.base, hook_event_name="UserPromptSubmit", prompt=prompt))
 
     def prompt(self, text):
-        hook("user_prompt", dict(self.base, hook_event_name="UserPromptSubmit", prompt=text))
+        return hook("user_prompt", dict(self.base, hook_event_name="UserPromptSubmit", prompt=text))
+
+    def env(self):
+        return dict(os.environ, CLAUDE_PROJECT_DIR=str(TMP), CLAUDE_SESSION_ID=self.sid)
+
+    def words(self):
+        try:
+            return json.loads((TMP / ".session" / self.sid / "state.json").read_text()).get("search_content", [])
+        except Exception:
+            return []
+
+    def search(self, *args):
+        """Run the search tool as Claude would, and log the call as the PostToolUse check would."""
+        r = sh("python3", str(TMP / "tools" / "search.py"), *args, env=self.env())
+        self.post("Bash", {"command": "python3 tools/search.py" + ("".join(f' "{a}"' for a in args))}, "x")
+        return r
+
+    def drive(self, word=None):
+        w = word or (self.words() or ["x"])[0]
+        self.post("mcp__Google_Drive__search_files", {"query": f"fullText contains '{w}'"}, "x")
 
     def post(self, tool, ti, resp="ok", fail=False):
         return hook("post_tool", dict(self.base, hook_event_name="PostToolUseFailure" if fail else "PostToolUse",
@@ -80,8 +99,7 @@ class Sess:
     def stop(self, msg):
         return hook("stop", dict(self.base, hook_event_name="Stop", last_assistant_message=msg))
 
-    def satisfy(self, skip=()):
-        cfg = json.loads((TMP / "controls" / "config.json").read_text())
+    def satisfy(self, skip=(), search=True, drive_word=None):
         calls = [
             ("Read", {"file_path": str(TMP / "controls" / "PROJECT-INSTRUCTIONS.md")}, "x"),
             ("Glob", {"pattern": "**/*.md"}, "x"),
@@ -91,15 +109,22 @@ class Sess:
             ("mcp__memory__memory_read", {"path": "/projects/x.md"}, "x"),
             ("ListSkills", {}, "x"),
             ("mcp__remote-devices__device_list_dir", {"path": "/x"}, "x"),
-            ("mcp__Google_Drive__search_files", {"query": "title contains 'x'"}, "x"),
         ]
         for t, ti, resp in calls:
             if t not in skip:
                 self.post(t, ti, resp)
+        if search:
+            self.search()
+        if "mcp__Google_Drive__search_files" not in skip:
+            self.drive(drive_word)
 
 
 def expect(name, ok, detail=""):
     RESULTS.append((name, bool(ok), detail))
+
+
+def reason_of(out):
+    return str((out or {}).get("reason", ""))
 
 
 def run():
@@ -174,23 +199,21 @@ def run():
     expect("with START-HERE restored, an ordinary page edit goes through again", decision(s.pre("Edit", {"file_path": work + "/pages/x.html", "new_string": "x"})[1]) is None)
 
     # ---- 6. Stop: the reply must report truthfully
-    s = Sess(); s.satisfy(skip=("Glob",))
+    s = Sess(); s.satisfy(skip=("ListSkills",))
     places = "Files; Artifacts; Claude docs; Chats; Project; Project instructions; Memory (project notes); Account memory and preferences; Skills and plugins; Folders; Working area (workspace); Google Drive"
     rc, out, _ = s.stop("Here is the answer.")
     expect("a reply with no search report is rejected", (out or {}).get("decision") == "block")
-    # Working area (workspace) isn't covered by satisfy(), so declare it
-    good = f"Answer.\nSearched: Files; Artifacts; Claude docs; Chats; Project; Project instructions; Memory (project notes); Account memory and preferences; Skills and plugins; Folders; Google Drive\nCouldn't search: Working area (workspace) - not offered in this session"
+    # Skills and plugins isn't covered here, so it must be declared
+    good = f"Answer.\nSearched: Files; Artifacts; Claude docs; Chats; Project; Project instructions; Memory (project notes); Account memory and preferences; Folders; Working area (workspace); Google Drive\nCouldn't search: Skills and plugins - not offered in this session"
     rc, out, _ = s.stop(good)
     expect("a place claimed unavailable but not recorded is rejected", (out or {}).get("decision") == "block")
-    sh("python3", str(TMP / "tools" / "declare.py"), "Working area (workspace)", "not offered in this session",
-       env=dict(os.environ, CLAUDE_PROJECT_DIR=str(TMP), CLAUDE_SESSION_ID=s.sid))
+    sh("python3", str(TMP / "tools" / "declare.py"), "Skills and plugins", "not offered in this session", env=s.env())
     rc, out, _ = s.stop(good)
-    expect("a truthful report is accepted", (out or {}).get("decision") != "block" and rc == 0)
+    expect("a truthful report is accepted", (out or {}).get("decision") != "block" and rc == 0, reason_of(out))
     s2 = Sess()
     rc, out, _ = s2.stop(f"Answer.\nSearched: {places}\nCouldn't search: none")
     expect("claiming searches that are not in the log is rejected", (out or {}).get("decision") == "block")
-    r = sh("python3", str(TMP / "tools" / "declare.py"), "Files", "not offered in this session",
-           env=dict(os.environ, CLAUDE_PROJECT_DIR=str(TMP), CLAUDE_SESSION_ID=s.sid))
+    r = sh("python3", str(TMP / "tools" / "declare.py"), "Files", "not offered in this session", env=s.env())
     expect("a place already searched cannot be declared unavailable", r.returncode != 0)
     rc, out, _ = s.stop(good.replace("Answer.", "I checked it and it is done."))
     expect("saying checked/done without 'Looked at' is rejected", (out or {}).get("decision") == "block")
@@ -203,6 +226,42 @@ def run():
     for _ in range(7):
         rc, last, _ = s3.stop("no footer")
     expect("a check cannot loop forever, and the owner is told when it lets a reply through", "systemMessage" in (last or {}))
+
+    # ---- 6b. the search must be the owner's, and used (the owner's decision of 14 Oct 2026)
+    footer = f"\nSearched: {places}\nCouldn't search: none"
+    s = Sess("Is the beige line 30 above the section?")
+    rc, out, _ = s.prompt("Is the beige line 30 above the section?")
+    ctx = (out or {}).get("hookSpecificOutput", {}).get("additionalContext", "")
+    expect("the message check tells Claude to search first, with the owner's words", "tools/search.py" in ctx and "beige" in ctx)
+    expect("the message check names the settled decision the message touches", "Beige line between sections" in ctx)
+    expect("the search tool runs without a click", s.pre("Bash", {"command": "python3 tools/search.py"})[1] is None)
+    s.satisfy(search=False, drive_word="beige")
+    rc, out, _ = s.stop("Answer." + footer)
+    expect("a reply without the owner's message searched is refused", (out or {}).get("decision") == "block" and "owner's own words" in reason_of(out), reason_of(out))
+    r = s.search()
+    first = r.stdout.split("STRONGEST MATCHES")[1].strip().splitlines()[1] if "STRONGEST MATCHES" in r.stdout else ""
+    expect("the search tool shows the strongest match first: the owner's own record", "START-HERE" in first and "beige" in first.lower(), first[:200])
+    recs = [json.loads(l) for l in (TMP / ".session" / s.sid / "searches.jsonl").read_text().splitlines()]
+    expect("the search tool records what it found in a log Claude cannot edit", recs and recs[-1]["places"]["Files"]["strong"] >= 1)
+    rc, out, _ = s.stop("Answer." + footer)
+    expect("a reply that ignores what the search found is refused", (out or {}).get("decision") == "block" and "quotes none" in reason_of(out), reason_of(out))
+    quoted = "START-HERE says: \"Beige line between sections: 30 above, 30 below.\"" + footer
+    rc, out, _ = s.stop(quoted)
+    expect("a reply that quotes what was found is accepted", (out or {}).get("decision") != "block", reason_of(out))
+    rc, out, _ = s.stop("Nothing found about this. Beige line between sections: 30 above, 30 below." + footer)
+    expect("a reply saying nothing was found, when something was, is refused", (out or {}).get("decision") == "block" and "nothing was found" in reason_of(out), reason_of(out))
+    s = Sess("Is the beige line 30 above the section?"); s.satisfy(drive_word="x")
+    rc, out, _ = s.stop(quoted)
+    expect("a Google Drive search without the owner's words does not count", (out or {}).get("decision") == "block" and "Google Drive" in reason_of(out), reason_of(out))
+    s = Sess("Please rebuild the page."); s.satisfy()
+    rc, out, _ = s.stop("Should the text column be 1220 wide?" + footer)
+    expect("a question the owner has settled is refused and shown the answer", (out or {}).get("decision") == "block" and "settled" in reason_of(out) and "1220" in reason_of(out), reason_of(out))
+    s = Sess("Let's change the text column width from 1220."); s.satisfy()
+    rc, out, _ = s.stop("Do you want the text column wider than 1220?" + footer)
+    expect("the owner can reopen a settled question", "but that is settled" not in reason_of(out), reason_of(out))
+    s = Sess("Hi."); s.satisfy(skip=("Read",))
+    rc, out, _ = s.stop("START-HERE says the column is 1220." + footer)
+    expect("leaning on a record that was not read is refused", (out or {}).get("decision") == "block" and "leans on" in reason_of(out), reason_of(out))
 
     # ---- 7. the checks fail closed
     s = Sess()

@@ -20,3 +20,8 @@ Looked at: <what you looked at, separated by semicolons>   (required whenever th
 
 Allowed reasons for "Couldn't search": not offered in this session; tool call failed; not linked to this computer; blocked by a control.
 If a place is not offered in this session, record it once with: python3 tools/declare.py "<place>" "<reason>"
+
+# The search itself (the owner's decision of 14 Oct 2026, enforced by the checks)
+
+Before anything is written: python3 tools/search.py  (no arguments: it searches this repository and records/ with the words of the owner's message, and prints them). Then Google Drive, Artifacts, Claude docs and Skills are searched with the same words; the Drive query must carry one of them.
+The reply quotes what was found, word for word, from every place that had strong matches. It never says nothing was found while the search log holds matches. It never asks about a decision in controls/settled.json; it uses the answer. A new decision of the owner's goes into controls/settled.json in the reply it is made.

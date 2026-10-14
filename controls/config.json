@@ -17,12 +17,20 @@
     "Google Drive"
   ],
   "extra_places": [
+    "Records",
     "Live website",
     "Other GitHub repositories",
     "Other Drive folders",
     "Connected Mac folders",
     "Git history"
   ],
+  "search_tool": "tools/search.py",
+  "settled_path": "controls/settled.json",
+  "records_dir": "records",
+  "quote_min_words": 5,
+  "strong_single_word_max_hits": 50,
+  "not_found_regex": "(?i)\\b(nothing (was |is |has been )?found|found nothing|no (record|records|note|notes|file|files|match|matches|mention|mentions|result|results|hit|hits)( of| for| about| on| in)?\\b|not (in|among|anywhere in) the (files|records|notes|repository)|(nowhere|not) (in|on) (the )?(record|file))\\b",
+  "records_claim_regex": "(?i)\\b(START-HERE|PROJECT-INSTRUCTIONS|the records?|the notes?|the settled list|settled\\.json|config\\.json)\\b[^.\\n]{0,40}\\b(says?|said|shows?|showed|holds?|held|records?|recorded|lists?|listed|states?|stated|confirms?)\\b",
   "unavailable_reasons_allowed": [
     "not offered in this session",
     "tool call failed",
