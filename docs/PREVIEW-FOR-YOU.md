@@ -26,7 +26,7 @@ Written 13 October 2026. Nothing here is switched on yet. The checks sit in the 
 - Before any change, Claude must have searched the 12 places in your instructions in that same reply, and read START-HERE from Google Drive. A copy of START-HERE lives in this repository and is checked against the Drive version.
 - At the start of every session the checks check themselves. If any check file has been changed, or something tries to switch them off, everything is blocked and you are told.
 - If a check crashes or can't run, the action is blocked, never let through.
-- A page can't be sent as a preview unless it passed the spacing and wording checks.
+- A page can't be sent as a preview unless it passed the spacing check. The wording check runs too, but since 14 October 2026 (your decision) it reports instead of blocking: every word that differs from the Word file is listed in the reply.
 
 ## Three decisions I need from you
 
