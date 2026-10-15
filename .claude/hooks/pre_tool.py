@@ -122,9 +122,9 @@ def push_words_given() -> bool:
 
 
 # ------------------------------------------------------------------ gates for any change
-def gate_for_change(control=False):
-    """Search before acting, START-HERE present, controls intact."""
-    if st.get("tampered") and not control:
+def gate_for_change(control=False, session_record=False):
+    """Search before acting, START-HERE present, controls intact. A session record may still be written while the integrity warning is on (owner's request, 15 Oct 2026)."""
+    if st.get("tampered") and not control and not session_record:
         deny("Not allowed: the automatic checks found that their own files were changed. "
              "Stop and tell the owner in plain English. Nothing can be changed until the owner restores them.")
     sh_path = project_dir() / cfg["start_here"]["copy_path"]
@@ -186,7 +186,7 @@ if tool in ("Edit", "Write", "NotebookEdit"):
             deny("Not allowed: this is larger than the " + str(cfg["max_file_bytes"] // 1000) + " KB limit for one file in this repository.")
     if is_control(path):
         change("Claude wants to change one of the automatic checks (" + rel(path) + "). Only approve if YOU asked for this change.", control=True)
-    gate_for_change()
+    gate_for_change(session_record=inside_root(path) and bool(re.match(r"records/sessions/[^/]+\.md$", rel(path))))
     if inside_root(path) or in_work_copy_folder(path):
         # An ordinary file in the repository, or in a work, copy or preview folder: no decision here.
         # Claude Code's own permission prompt decides (changed 14 Oct 2026 at the owner's request).

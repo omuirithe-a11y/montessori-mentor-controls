@@ -306,7 +306,7 @@ def run():
     seen = TMP / "rv_seen.txt"
     hook("stop", dict(sp4.base, hook_event_name="Stop", last_assistant_message="Answer." + foot_all),
          env_extra={"MM_REVIEWER_DISABLE": "", "MM_REVIEWER_CMD": f"python3 {TMP / 'rv_echo.py'} {seen}"})
-    expect("the reviewer is shown the refused attempts", seen.exists() and "did not run" in seen.read_text() and "issues" in seen.read_text(), seen.read_text()[-300:] if seen.exists() else "no file")
+    expect("the reviewer is shown the refused attempts", seen.exists() and "may have run afterwards" in seen.read_text() and "did not run" not in seen.read_text() and "issues" in seen.read_text(), seen.read_text()[-300:] if seen.exists() else "no file")
 
     # ---- 6e. item 1, the decision gate (owner's answers of 15 Oct 2026: A=1 block the preview, B=2 headings asked only when needed, C=1 "Q4: 2", D=1 register in the repository)
     def reg_now():
@@ -407,8 +407,8 @@ def run():
     sb.satisfy()
     r = brief(sb, "pg5", "30::gap::fig:8", "--word", str(TMP / "work" / "conflict.docx"), "--no-headings")
     expect("two numbers for one thing open a question automatically", r.returncode == 1 and "two numbers" in r.stdout.lower() and "45" in r.stdout, r.stdout)
-    qid = re.search(r"(Q\d+)\. Two numbers", r.stdout).group(1)
-    sb.prompt(f"{qid}: 1")
+    for qid in re.findall(r"(Q\d+)\. Two numbers", r.stdout):  # that one sentence touches two settled figures (2 and 8), so two questions
+        sb.prompt(f"{qid}: 1")
 
     # the preview gate (A=1): an unapproved number on the page blocks the receipt
     sb.satisfy()
@@ -515,6 +515,8 @@ def run():
     expect("a changed check file is detected at session start", "INTEGRITY FAILURE" in ctx)
     s.satisfy()
     expect("and ordinary changes are then refused", decision(s.pre("Edit", {"file_path": work + "/pages/x.html", "new_string": "x"})[1]) == "deny")
+    expect("but a session record can still be written", decision(s.pre("Write", {"file_path": work + "/records/sessions/2026-10-15-x.md", "content": "x"})[1]) is None)
+    expect("and a record cannot be used to slip in a path outside records/sessions", decision(s.pre("Write", {"file_path": work + "/records/sessions/../../pages/x.md", "content": "x"})[1]) == "deny")
     expect("but the owner can still approve repairing the checks", decision(s.pre("Edit", {"file_path": work + "/.claude/hooks/stop.py", "new_string": "x"})[1]) == "ask")
     stp.write_text(orig)
     (TMP / ".claude" / "settings.local.json").write_text('{"disableAllHooks": true}')

@@ -127,6 +127,8 @@ else:
     brief_set = {normalise_quote(h) for h in args.heading}
     if word_heads and brief_set == {normalise_quote(h) for h in word_heads}:
         headings_source = "word-styles"
+    elif not args.heading and not word_heads:
+        headings_source = "none-claimed"  # the brief claims no headings and the Word file shows none: nothing to ask
     elif args.headings_source and args.headings_source.startswith("q:") and ("Q" + args.headings_source[2:]) in answered:
         headings_source = args.headings_source
     else:
