@@ -74,7 +74,15 @@
     "reviewer_max_blocks_per_reply": 2,
     "note": "Owner's decision of 15 Oct 2026 (Q2, option 1). Every owner message is recorded word for word in controls/orders.json and shown to Claude at the start of each reply; a message that drops a topic must be followed by python3 tools/order.py drop \"<terms>\"; a reply containing a dropped term is refused; a second model compares each reply with the owner's latest message and the orders."
   },
-  "stop_excuse_regex": "(?i)(\\bI (will |'ll |must |have to )?stop here\\b|\\b(gate|hook|hooks|check|checks|control|controls) (has |have )?(stopped|blocked|prevented|refused) me\\b|\\bI (can'?t|cannot|am unable to|am not able to) (go on|continue|proceed|carry on)\\b|\\bI have stopped\\b|\\bfull stop\\b)",
+  "measure": {
+    "enabled": true,
+    "judgement_regex": "(?i)(\\b\\d+(\\.\\d+)?\\s*(/|out of)\\s*10\\b|\\bI (rate|score|grade|estimate|reckon|guess|think|believe|feel)\\b|\\b(in my (opinion|view|judg(e)?ment)|my (judg(e)?ment|estimate|rating|impression))\\b|\\b(looks|seems|appears) (fine|good|ok|okay|right|correct|sound|reasonable)\\b|\\b(good|fine|reasonable) enough\\b|\\b\\d+(\\.\\d+)?\\s*% (accurate|confident|sure|certain|reliable|likely)\\b)",
+    "measuring_commands_regex": "(?i)(tests/prove_it_bites\\.py|tools/(measure_spacing|check_wording|size_alarm|preview_gate)\\.py|(^|\\s)wc\\s|\\bpytest\\b|\\bgrep\\s+-[a-z]*c\\b|\\bgit\\s+diff\\s+--(stat|numstat|shortstat)\\b|\\bgit\\s+rev-list\\s+--count\\b)",
+    "measuring_tool_names_regex": "(?i)(actions_list|actions_get|get_check_run|get_job_logs|list_pull_requests|pull_request_read)$",
+    "min_figure_digits": 2,
+    "note": "Owner's order of 15 Oct 2026 (O6): measure instead of using judgement, every time. A reply that gives a rating, an estimate, a percentage or an opinion is refused unless a measuring tool ran in the same reply and the reply reports a figure that tool printed. Quoted phrases do not count as the reply's own words."
+  },
+  "stop_excuse_regex":"(?i)(\\bI (will |'ll |must |have to )?stop here\\b|\\b(gate|hook|hooks|check|checks|control|controls) (has |have )?(stopped|blocked|prevented|refused) me\\b|\\bI (can'?t|cannot|am unable to|am not able to) (go on|continue|proceed|carry on)\\b|\\bI have stopped\\b|\\bfull stop\\b)",
   "forbidden_extensions": [
     ".docx",
     ".doc",

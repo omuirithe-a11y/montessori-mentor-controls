@@ -300,6 +300,30 @@ def run():
     rc, out, _ = stop_with(s10, good9, "rv_crash.py")
     expect("a reviewer that cannot run does not block the reply", (out or {}).get("decision") != "block", reason_of(out))
 
+    # ---- 6c. measure, do not judge (owner's order of 15 Oct 2026, O6)
+    sm = Sess(); sm.satisfy()
+    foot_m = f"\nSearched: {places}\nCouldn't search: none\nLooked at: PROJECT-INSTRUCTIONS.md"
+    rc, out, _ = sm.stop("I rate the hooks 8 out of 10." + foot_m)
+    expect("a rating with no measurement is refused", (out or {}).get("decision") == "block" and "Measure instead" in reason_of(out), reason_of(out))
+    rc, out, _ = sm.stop("Probably fine. In my opinion it is good." + foot_m)
+    expect("an opinion with no measurement is refused", (out or {}).get("decision") == "block" and "Measure instead" in reason_of(out), reason_of(out))
+    rc, out, _ = sm.stop('An example of a refused sentence is "I rate the hooks 8 out of 10" and nothing else.' + foot_m)
+    expect("a judgement phrase inside quotation marks is not read as the reply's own words", (out or {}).get("decision") != "block", reason_of(out))
+    sm.post("Bash", {"command": "python3 tests/prove_it_bites.py"}, {"stdout": "167 of 168 checks behaved as expected."})
+    rc, out, _ = sm.stop("I rate the hooks 8 out of 10." + foot_m)
+    expect("a judgement is still refused when the measurement it follows is not reported", (out or {}).get("decision") == "block" and "reports none of the figures" in reason_of(out), reason_of(out))
+    rc, out, _ = sm.stop("The test run printed 167 of 168 scenarios as expected, so I rate the hooks 8 out of 10." + foot_m)
+    expect("a judgement is accepted when a measuring tool ran and its figure is reported", (out or {}).get("decision") != "block", reason_of(out))
+    sm2 = Sess(); sm2.satisfy()
+    rc, out, _ = sm2.stop("The run printed 167 of 168 checks as expected." + foot_m)
+    expect("a plain statement of a figure needs no measuring tool", (out or {}).get("decision") != "block", reason_of(out))
+    sm3 = Sess(); sm3.satisfy()
+    sm3.post("Bash", {"command": "ls -la"}, {"stdout": "total 42"})
+    rc, out, _ = sm3.stop("I think it is fine, 42 files." + foot_m)
+    expect("an ordinary command is not a measurement", (out or {}).get("decision") == "block" and "Measure instead" in reason_of(out), reason_of(out))
+    rc, out, _ = hook("user_prompt", dict(sm3.base, hook_event_name="UserPromptSubmit", prompt="How good is it?"))
+    expect("the owner's message is answered with the measure-not-judge instruction", "MEASURE, DO NOT JUDGE" in str(out), str(out)[:200])
+
     # ---- 6d. the integrity warning no longer blocks the work that repairs the checks (owner's decision, 15 Oct 2026)
     def set_state(sess, **kw):
         sp = TMP / ".session" / sess.sid / "state.json"

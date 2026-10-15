@@ -50,6 +50,10 @@ if oc.get("enabled"):
     if is_drop:
         lines.append("THIS MESSAGE DROPS A TOPIC. Before replying run: python3 tools/order.py drop \"<words the owner typed that name the topic>\" (one or more terms, copied exactly from the message). "
                      "Then do not mention the topic again, not even to say you will not; the reply is refused if it does.")
+if cfg.get("measure", {}).get("enabled"):
+    lines.append("MEASURE, DO NOT JUDGE (the owner's order of 15 Oct 2026): a rating, an estimate, a percentage or an opinion is refused unless a measuring tool ran in the same reply "
+                 "(python3 tests/prove_it_bites.py, python3 tools/measure_spacing.py, python3 tools/check_wording.py, python3 tools/size_alarm.py, wc, grep -c, git diff --stat, "
+                 "or a GitHub Actions lookup) and the reply states a figure that tool printed. Run the measurement first, then report its figure.")
 for q in closed:
     lines.append(f"ANSWERED by the owner: {q['id']} -> option {q['answer']}: {q['answer_text']}  (their words are recorded in controls/decisions.json). Use the answer; do not ask again.")
 if not closed and re.search(r"(?i)\bQ\d+\b", prompt):
