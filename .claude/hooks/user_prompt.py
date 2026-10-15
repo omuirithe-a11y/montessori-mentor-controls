@@ -2,6 +2,7 @@
 Only the owner's typed message can create a "go" or a "push" permission - Claude cannot.
 Owner's decision of 14 Oct 2026: the search words are the owner's, and the search comes before anything is written."""
 import json
+import os
 import re
 from lib import *
 
@@ -22,8 +23,9 @@ append_log(sid, {"turn": st["turn"], "event": "owner_message", "chars": len(prom
                  "go": st["go_turn"] == st["turn"], "push_words": st["push_ok_turn"] == st["turn"], "content_words": content})
 
 # What Claude is told the moment the owner's message arrives: search first, with these words, then quote what was found.
+tool_cmd = 'python3 "$HOME/.mm-controls/tools/search.py"' if os.environ.get("MM_USER_LEVEL") else "python3 tools/search.py"
 lines = ["SEARCH FIRST, BEFORE WRITING A WORD OF THE REPLY (the owner's standing instruction; the end-of-reply check refuses a reply without it).",
-         "1. Run: python3 tools/search.py   - it searches this repository and the records with the owner's own words"
+         "1. Run: " + tool_cmd + "   - it searches this repository and the records with the owner's own words"
          + (": " + ", ".join(content) if content else " (this message has no content words; the run still records that)") + ".",
          "2. Search Google Drive, Artifacts, Claude docs and Skills with the same words. The Drive query must carry one of them.",
          "3. In the reply, quote what was found word for word. Never say nothing was found while the search log holds matches.",

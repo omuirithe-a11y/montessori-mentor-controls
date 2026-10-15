@@ -40,6 +40,23 @@
   "max_blocks_per_reply": 60,
   "ceiling_extra_blocks": 5,
   "min_drive_queries_for_not_found": 3,
+  "cloud_unavailable_places": [
+    "Chats",
+    "Project",
+    "Memory (project notes)",
+    "Account memory and preferences",
+    "Folders"
+  ],
+  "file_claim_verbs_regex": "(?i)\\b(made|created|built|wrote|written|saved|generated|produced)\\b",
+  "file_claim_negation_regex": "(?i)\\b(not|no|never|didn'?t|can'?t|cannot|couldn'?t|won'?t|haven'?t|hasn'?t|isn'?t|aren'?t|wasn'?t|nothing|unable|without|unless|if)\\b",
+  "file_claim_extensions": "docx|doc|pdf|xlsx|pptx|html|htm|md|json|py|csv|txt|zip|png|jpg|jpeg|sh|patch",
+  "claim_reviewer": {
+    "enabled": true,
+    "command": ["claude", "-p", "--model", "haiku", "--no-session-persistence", "--disable-slash-commands"],
+    "timeout_seconds": 90,
+    "max_blocks_per_reply": 2,
+    "note": "A second model reads the reply and this turn's tool log and names claims the log does not support. If it cannot run, the reply is not blocked on its account (it is logged)."
+  },
   "stop_excuse_regex": "(?i)(\\bI (will |'ll |must |have to )?stop here\\b|\\b(gate|hook|hooks|check|checks|control|controls) (has |have )?(stopped|blocked|prevented|refused) me\\b|\\bI (can'?t|cannot|am unable to|am not able to) (go on|continue|proceed|carry on)\\b|\\bI have stopped\\b|\\bfull stop\\b)",
   "forbidden_extensions": [
     ".docx",

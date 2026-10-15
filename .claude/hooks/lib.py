@@ -235,6 +235,36 @@ QUESTION_INDIRECT = [
 QUESTION_OPTION = re.compile(r"^\s*([-*]\s*)?(\*\*)?(\(?[a-dA-D]\)|[A-D]:|option [a-d]\b)", re.I)
 
 
+def unquoted(text: str) -> str:
+    """The text without quotations, code and block quotes, so a phrase quoted as an example is not read as the reply's own words."""
+    t = re.sub(r"```.*?```", " ", text or "", flags=re.S)
+    t = re.sub(r"`[^`\n]*`", " ", t)
+    t = re.sub(r'"[^"\n]{3,400}"', " ", t)
+    t = re.sub(r"\u201c[^\u201d\n]{3,400}\u201d", " ", t)
+    return "\n".join(l for l in t.splitlines() if not l.lstrip().startswith(">"))
+
+
+def file_exists_anywhere(name: str) -> bool:
+    """Is there a file with this name (or this path) anywhere the work could have put it?"""
+    import tempfile
+    base = os.path.basename(name)
+    if os.path.isabs(name) and os.path.exists(name):
+        return True
+    roots = [project_dir(), Path("/mnt/user-data"), Path.home(), Path(tempfile.gettempdir())]
+    seen = 0
+    for root in roots:
+        if not root.exists():
+            continue
+        for dp, dn, fn in os.walk(root):
+            dn[:] = [d for d in dn if d not in (".git", "node_modules", "__pycache__", "proc", "sys")]
+            seen += len(fn)
+            if base in fn:
+                return True
+            if dp[len(str(root)):].count(os.sep) > 7 or seen > 80000:
+                dn[:] = []
+    return False
+
+
 def questions_in(text: str) -> list:
     """Every sentence of the text that asks the owner something, in any of the ways English asks."""
     t = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text or "")
@@ -289,7 +319,9 @@ def normalise_markdown(s: str) -> str:
 READ_ONLY_CMD = re.compile(
     r"^\s*(ls|cat|head|tail|grep|egrep|rg|find|wc|sort|uniq|pwd|cd|echo|printf|which|stat|file|du|df|tree|diff|cmp|"
     r"sha256sum|shasum|md5sum|date|env|printenv|whoami|test|\[|true|false|sed\s+-n|awk|jq|column|basename|dirname|realpath|"
-    r"git\s+(status|log|diff|show|ls-files|branch|rev-parse|remote|fetch|grep|blame|describe|shortlog|count-objects|config\s+--get)|"
+    r"gh\s+(pr|issue|run|repo|release|workflow|auth)\s+(list|view|diff|checks|status)\b|"
+    r"gh\s+api\b(?!.*(\s-X\b|--method|\s-f\b|\s-F\b|--field|--raw-field|--input))|"
+    r"git\s+(status|log|diff|show|ls-files|ls-remote|rev-list|cherry|merge-base|branch|rev-parse|remote|fetch|grep|blame|describe|shortlog|count-objects|config\s+--get)|"
     r"python3?\s+-[cI]*\s*['\"]?\s*(print|import json))",
     re.I,
 )
@@ -313,7 +345,7 @@ def bash_is_read_only(cmd: str) -> bool:
     return bool(segs) and all(READ_ONLY_CMD.match(s) for s in segs)
 
 
-SEARCH_TOOL_CMD = re.compile(r"""^\s*(cd\s+\S+\s*&&\s*)?python3?\s+(\"?\$CLAUDE_PROJECT_DIR\"?/|\./)?tools/search\.py(\s|$)""")
+SEARCH_TOOL_CMD = re.compile(r"""^\s*(cd\s+\S+\s*&&\s*)?python3?\s+(\"?\$CLAUDE_PROJECT_DIR\"?/|\./|\"?\$HOME\"?/\.mm-controls/|~/\.mm-controls/)?tools/search\.py(\s|$)""")
 
 
 def is_search_tool(cmd: str) -> bool:
@@ -411,7 +443,15 @@ def allow_silently():
     sys.exit(0)
 
 
+DECISION_HOOK = None  # set by pre_tool.py: records every refusal and every click asked for, so the reviewer can see refused attempts
+
+
 def decide(decision: str, reason: str):
+    if DECISION_HOOK:
+        try:
+            DECISION_HOOK(decision, reason)
+        except Exception:
+            pass
     print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
                                               "permissionDecision": decision,
                                               "permissionDecisionReason": reason}}))

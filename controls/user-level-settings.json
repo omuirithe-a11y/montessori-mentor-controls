@@ -1,0 +1,11 @@
+{
+  "_about": "Optional. Merge the 'hooks' part into the user-level Claude settings (or the cloud environment's setup) so the checks also run in sessions that do not start inside this repository. Each command skips itself inside the repository (the repository's own settings already run the checks there). Not active until installed.",
+  "hooks": {
+    "SessionStart": [{"hooks": [{"type": "command", "timeout": 120, "command": "sh -c '[ -f \"$CLAUDE_PROJECT_DIR/controls/config.json\" ] && exit 0; sh \"$HOME/.mm-controls-bootstrap.sh\" session_start'"}]}],
+    "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "sh -c '[ -f \"$CLAUDE_PROJECT_DIR/controls/config.json\" ] && exit 0; sh \"$HOME/.mm-controls-bootstrap.sh\" user_prompt'"}]}],
+    "PreToolUse": [{"matcher": ".*", "hooks": [{"type": "command", "timeout": 60, "command": "sh -c '[ -f \"$CLAUDE_PROJECT_DIR/controls/config.json\" ] && exit 0; sh \"$HOME/.mm-controls-bootstrap.sh\" pre_tool'"}]}],
+    "PostToolUse": [{"matcher": ".*", "hooks": [{"type": "command", "command": "sh -c '[ -f \"$CLAUDE_PROJECT_DIR/controls/config.json\" ] && exit 0; sh \"$HOME/.mm-controls-bootstrap.sh\" post_tool'"}]}],
+    "PostToolUseFailure": [{"matcher": ".*", "hooks": [{"type": "command", "command": "sh -c '[ -f \"$CLAUDE_PROJECT_DIR/controls/config.json\" ] && exit 0; sh \"$HOME/.mm-controls-bootstrap.sh\" post_tool'"}]}],
+    "Stop": [{"hooks": [{"type": "command", "command": "sh -c '[ -f \"$CLAUDE_PROJECT_DIR/controls/config.json\" ] && exit 0; sh \"$HOME/.mm-controls-bootstrap.sh\" stop'"}]}]
+  }
+}
