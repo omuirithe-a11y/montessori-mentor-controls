@@ -22,7 +22,7 @@ elif len(args) == 2:
 else:
     print(__doc__)
     sys.exit(1)
-sid = os.environ.get("CLAUDE_SESSION_ID")
+sid = current_session_id()
 if not sid:
     print("No session id is available, so this cannot be recorded. Tell the owner.")
     sys.exit(1)

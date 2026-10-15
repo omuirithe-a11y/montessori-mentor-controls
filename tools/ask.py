@@ -19,7 +19,7 @@ text, options = args[0].strip(), [a.strip() for a in args[1:] if a.strip()]
 if len(options) < 2:
     print("A question needs at least two numbered options.")
     sys.exit(1)
-sid = os.environ.get("CLAUDE_SESSION_ID")
+sid = current_session_id()
 if not sid:
     print("No session id is available, so the question cannot be recorded. Tell the owner.")
     sys.exit(1)

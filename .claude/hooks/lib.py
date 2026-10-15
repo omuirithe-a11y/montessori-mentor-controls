@@ -18,7 +18,29 @@ def load_config() -> dict:
 
 def read_event() -> dict:
     raw = sys.stdin.read()
-    return json.loads(raw) if raw.strip() else {}
+    ev = json.loads(raw) if raw.strip() else {}
+    try:  # every check leaves the live session id where the tools can find it if the start check never ran (owner's decision of 15 Oct 2026, option 2)
+        if ev.get("session_id"):
+            d = project_dir() / ".session"
+            d.mkdir(parents=True, exist_ok=True)
+            (d / "current").write_text(safe_id(ev["session_id"]), encoding="utf-8")
+    except Exception:
+        pass
+    return ev
+
+
+def current_session_id():
+    """The session id for the tools: the environment first, else the id the checks last left in .session/current (only if it is under 12 hours old)."""
+    sid = os.environ.get("CLAUDE_SESSION_ID")
+    if sid:
+        return sid
+    try:
+        f = project_dir() / ".session" / "current"
+        if f.is_file() and time.time() - f.stat().st_mtime < 12 * 3600:
+            return f.read_text(encoding="utf-8").strip() or None
+    except Exception:
+        pass
+    return None
 
 
 def safe_id(session_id) -> str:
