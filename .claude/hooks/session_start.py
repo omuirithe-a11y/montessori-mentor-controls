@@ -27,6 +27,8 @@ if envf:
 watch = []
 for pat in (".claude/hooks/*", ".claude/settings.json", "controls/*", "tools/*", "tests/*", ".github/workflows/*", ".github/CODEOWNERS", "CLAUDE.md"):
     for p in sorted(root.glob(pat)):
+        if p.relative_to(root).as_posix() == REGISTER_REL:
+            continue  # checked separately below: it may grow (added questions, answers) but not be rewritten
         if p.is_file() and "__pycache__" not in str(p) and p.suffix != ".pyc":
             watch.append(p.relative_to(root).as_posix())
 
@@ -53,6 +55,15 @@ for rp in watch:
         differs.append(rp + " (could not compare)")
 if differs:
     problems.append("These control files differ from the approved version: " + ", ".join(differs[:8]))
+
+try:
+    base_reg = git("show", f"{compare_with}:{REGISTER_REL}")
+    reg_problems = register_ok_against(base_reg.stdout.decode("utf-8") if base_reg.returncode == 0 else "",
+                                       register_path().read_text(encoding="utf-8") if register_path().exists() else "")
+    if reg_problems:
+        problems.append("The decision register differs from the approved version by more than added questions and answers: " + "; ".join(reg_problems[:4]))
+except Exception:
+    problems.append("The decision register could not be compared with the approved version")
 
 # 3. Are all the checks actually switched on, and nothing overriding them?
 sj = root / ".claude" / "settings.json"
@@ -94,6 +105,10 @@ if problems:
                  + "\nNo change to anything is allowed until the owner restores the approved version.")
 else:
     parts.append("The automatic checks are intact and switched on." + (" " + " ".join(notes) if notes else ""))
+_oq = open_questions()
+if _oq:
+    parts.append("OPEN QUESTIONS waiting for the owner's answer (nothing that depends on them may be built, previewed, sent, published or pushed): "
+                 + " | ".join(f"{q['id']}: {q['text']}" for q in _oq))
 parts.append("START-HERE.md is loaded below. It is the master copy and lives in this repository (controls/START-HERE.md). It is not kept in Google Drive.")
 for rel_path in cfg["context_files"]:
     p = root / rel_path

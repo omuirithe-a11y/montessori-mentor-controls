@@ -3,6 +3,7 @@ and confirms each one is blocked (and that normal safe actions are not). Exit 0 
 Usage: python3 tests/prove_it_bites.py"""
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -305,7 +306,136 @@ def run():
     seen = TMP / "rv_seen.txt"
     hook("stop", dict(sp4.base, hook_event_name="Stop", last_assistant_message="Answer." + foot_all),
          env_extra={"MM_REVIEWER_DISABLE": "", "MM_REVIEWER_CMD": f"python3 {TMP / 'rv_echo.py'} {seen}"})
-    expect("the reviewer is shown the refused attempts", seen.exists() and "did not run" in seen.read_text() and "issues" in seen.read_text(), seen.read_text()[-300:] if seen.exists() else "no file")
+    expect("the reviewer is shown the refused attempts", seen.exists() and "may have run afterwards" in seen.read_text() and "did not run" not in seen.read_text() and "issues" in seen.read_text(), seen.read_text()[-300:] if seen.exists() else "no file")
+
+    # ---- 6e. item 1, the decision gate (owner's answers of 15 Oct 2026: A=1 block the preview, B=2 headings asked only when needed, C=1 "Q4: 2", D=1 register in the repository)
+    def reg_now():
+        return json.loads((TMP / "controls" / "decisions.json").read_text())["questions"]
+
+    def ask(sess, text, *opts):
+        return sh("python3", str(TMP / "tools" / "ask.py"), text, *opts, env=sess.env())
+    sq = Sess("Which style should the page title use?"); sq.satisfy()
+    r = ask(sq, "Should the page title be set in capitals or in lower case?", "Capitals", "Lower case")
+    expect("a question is raised, recorded as open, and printed with numbered options", r.returncode == 0 and "RAISED Q1" in r.stdout and "1. Capitals" in r.stdout and reg_now()[0]["status"] == "open", r.stdout + r.stderr)
+    r = ask(sq, "Should the page title be set in capitals or in lower case?", "Capitals", "Lower case")
+    expect("asking the same open question again adds nothing", "ALREADY OPEN" in r.stdout and len(reg_now()) == 1, r.stdout)
+    r = ask(sq, "Which beige line spacing applies between sections?", "30", "45")
+    expect("a question the settled list already answers is not asked", r.returncode == 1 and "NOT ASKED" in r.stdout, r.stdout)
+    out = sq.pre("Write", {"file_path": str(TMP / "pages" / "x.html"), "content": "x"})[1]
+    expect("while a question is open, writing a page file is refused and names the question", decision(out) == "deny" and "Q1" in reason(out), reason(out))
+    expect("while a question is open, publishing an artifact is refused", decision(sq.pre("Artifact", {"action": "publish", "file_path": "x.html"})[1]) == "deny")
+    expect("while a question is open, sending a file is refused", decision(sq.pre("SendUserFile", {"files": ["x.html"], "status": "normal"})[1]) == "deny")
+    expect("while a question is open, issuing a preview receipt is refused", decision(sq.pre("Bash", {"command": "python3 tools/preview_gate.py pages/x.html src.txt"})[1]) == "deny")
+    expect("while a question is open, reading and searching carry on", decision(sq.pre("Read", {"file_path": str(TMP / "controls" / "START-HERE.md")})[1]) is None)
+    out = sq.pre("Edit", {"file_path": str(TMP / "controls" / "decisions.json"), "new_string": "x"})[1]
+    expect("Claude cannot edit the register with the file tools", decision(out) == "deny")
+    expect("Claude cannot change the register with a shell command", decision(sq.pre("Bash", {"command": "sed -i s/open/answered/ controls/decisions.json"})[1]) == "deny")
+    sq.stop("Q1: 1")
+    expect("text Claude writes cannot answer a question", reg_now()[0]["status"] == "open")
+    rc, out, _ = sq.prompt("I pick the first option for Q1")
+    expect("an answer that is not in the form Q<number>: <option number> leaves the question open", reg_now()[0]["status"] == "open" and "not in the form" in str(out), str(out)[:300])
+    sq.prompt("Q1: 3")
+    expect("an option number that does not exist leaves the question open", reg_now()[0]["status"] == "open")
+    rc, out, _ = sq.prompt("Q1: 2")
+    expect("the owner's typed 'Q1: 2' closes the question and records their words", reg_now()[0]["status"] == "answered" and reg_now()[0]["answer"] == 2 and reg_now()[0]["answered_words"] == "Q1: 2", str(reg_now()[0]))
+    sq.satisfy()
+    expect("once answered, page work is no longer refused for that question", decision(sq.pre("Write", {"file_path": str(TMP / "pages" / "x.html"), "content": "x"})[1]) is None)
+    r = ask(sq, "Should the page title be set in capitals or in lower case?", "Capitals", "Lower case")
+    expect("a question the owner already answered is not asked again; the answer is shown", "NOT ASKED" in r.stdout and "Lower case" in r.stdout, r.stdout)
+    rc, out, _ = sq.prompt("x" * 3000 + " end")
+    plen = max(len(json.loads(l)["prompt"]) for l in (TMP / ".session" / sq.sid / "prompts.jsonl").read_text().splitlines())
+    expect("the full text of every message is kept, not the first 2,000 characters", plen > 3000, str(plen))
+    sys.path.insert(0, str(TMP / ".claude" / "hooks"))
+    import importlib
+    L = importlib.import_module("lib")
+    base_reg = json.dumps({"questions": [{"id": "Q1", "text": "t", "options": ["a", "b"], "raised": "d", "status": "answered", "answer": 1, "answered_words": "Q1: 1"}]})
+    grown = json.dumps({"questions": [json.loads(base_reg)["questions"][0], {"id": "Q2", "text": "u", "options": ["a", "b"], "raised": "d", "status": "open"}]})
+    rewritten = json.dumps({"questions": [dict(json.loads(base_reg)["questions"][0], answer=2)]})
+    expect("the session-start check lets the register grow", L.register_ok_against(base_reg, grown) == [])
+    expect("the session-start check refuses a rewritten answer", bool(L.register_ok_against(base_reg, rewritten)))
+    expect("the session-start check refuses a removed question", bool(L.register_ok_against(base_reg, json.dumps({"questions": []}))))
+
+    # replies cannot carry a decision
+    sr = Sess("Use 37px for the margin."); sr.satisfy()
+    rc, out, _ = sr.stop("I chose 41px for the margin." + foot_all)
+    expect("a reply that admits a choice, or gives a number nobody approved, is refused", (out or {}).get("decision") == "block" and ("choice" in reason_of(out) or "41" in reason_of(out)), reason_of(out))
+    rc, out, _ = sr.stop("The margin is 37px, as you said." + foot_all)
+    expect("a number the owner gave is accepted in a reply", (out or {}).get("decision") != "block", reason_of(out))
+    rc, out, _ = sr.stop("The text column is 1220 wide and a heading has 30 above it." + foot_all)
+    expect("an approved figure is accepted in a reply", (out or {}).get("decision") != "block", reason_of(out))
+    rc, out, _ = sr.stop('An example: "I chose 41px" is not allowed.' + foot_all)
+    expect("a quoted example of a choice is not read as the reply's own words", (out or {}).get("decision") != "block", reason_of(out))
+    sa = Sess("Please ask me about the footer font."); sa.satisfy()
+    r = ask(sa, "Which font should the footer use?", "Serif", "Sans serif")
+    rc, out, _ = sa.stop("Answer." + foot_all)
+    expect("a reply that raises a question must contain it with its options", (out or {}).get("decision") == "block" and "Which font should the footer use?" in reason_of(out), reason_of(out))
+    rc, out, _ = sa.stop("Q2. Which font should the footer use?\n1. Serif\n2. Sans serif\nAnswer with: Q2: <number>" + foot_all)
+    expect("a reply that contains the question and its options is accepted", (out or {}).get("decision") != "block", reason_of(out))
+
+    # the build brief (item 4) and the conflict scan (item 5)
+    def brief(sess, page, *a):
+        return sh("python3", str(TMP / "tools" / "brief.py"), page, *a, env=sess.env())
+    sa.prompt("Q2: 1")
+    sb = Sess("Quotations are 23 apart in this page."); sb.satisfy()
+    r = brief(sb, "pg1", "30::gap::assumed", "--no-headings")
+    expect("a brief entry whose source is 'assumed' is refused", r.returncode == 1 and "not allowed" in r.stdout, r.stdout)
+    r = brief(sb, "pg1", "31::gap above a heading::fig:8", "--no-headings")
+    expect("a brief entry that does not match its figure is refused", r.returncode == 1 and "does not contain 31" in r.stdout, r.stdout)
+    r = brief(sb, "pg1", "23::quotation line gap::quote:Quotations are 99 apart", "--no-headings")
+    expect("a quotation that is not the owner's words is refused", r.returncode == 1, r.stdout)
+    r = brief(sb, "pg1", "30::gap above a heading::fig:8", "23::quotation line gap::quote:Quotations are 23 apart", "--no-headings")
+    expect("a brief with sourced numbers is filed", r.returncode == 0 and "BRIEF FILED" in r.stdout, r.stdout)
+    r = brief(sb, "pg2", "30::gap::fig:8", "--heading", "Aims")
+    expect("a heading map with no Word file to compare is a question for the owner", r.returncode == 1 and "Raised Q" in r.stdout, r.stdout)
+    qid = re.search(r"Raised (Q\d+)", r.stdout).group(1)
+    sb.prompt(f"{qid}: 1")
+    sb.satisfy()
+    r = brief(sb, "pg2", "30::gap::fig:8", "--heading", "Aims", "--headings-source", "q:" + qid[1:])
+    expect("once the owner has answered the heading question, the brief is filed", r.returncode == 0, r.stdout)
+    import zipfile
+    (TMP / "work").mkdir(exist_ok=True)
+    with zipfile.ZipFile(TMP / "work" / "styled.docx", "w") as z:
+        z.writestr("word/document.xml", '<w:document xmlns:w="w"><w:body><w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Aims</w:t></w:r></w:p><w:p><w:r><w:t>Body text.</w:t></w:r></w:p></w:body></w:document>')
+    with zipfile.ZipFile(TMP / "work" / "conflict.docx", "w") as z:
+        z.writestr("word/document.xml", '<w:document xmlns:w="w"><w:body><w:p><w:r><w:t>The beige line between sections is 45 px above the heading.</w:t></w:r></w:p></w:body></w:document>')
+    r = brief(sb, "pg3", "30::gap::fig:8", "--word", str(TMP / "work" / "styled.docx"), "--heading", "Aims")
+    expect("when the Word styles and the brief agree on the headings, no question is asked", r.returncode == 0 and "word-styles" in r.stdout, r.stdout)
+    r = brief(sb, "pg4", "30::gap::fig:8", "--word", str(TMP / "work" / "styled.docx"), "--heading", "Something else")
+    expect("when the Word styles and the brief disagree, the owner is asked", r.returncode == 1 and "disagree" in r.stdout.lower(), r.stdout)
+    qid = re.search(r"Raised (Q\d+)", r.stdout).group(1)
+    sb.prompt(f"{qid}: 1")
+    sb.satisfy()
+    r = brief(sb, "pg5", "30::gap::fig:8", "--word", str(TMP / "work" / "conflict.docx"), "--no-headings")
+    expect("two numbers for one thing open a question automatically", r.returncode == 1 and "two numbers" in r.stdout.lower() and "45" in r.stdout, r.stdout)
+    for qid in re.findall(r"(Q\d+)\. Two numbers", r.stdout):  # that one sentence touches two settled figures (2 and 8), so two questions
+        sb.prompt(f"{qid}: 1")
+
+    # the preview gate (A=1): an unapproved number on the page blocks the receipt
+    sb.satisfy()
+    (TMP / "pages").mkdir(exist_ok=True)
+    (TMP / "pages" / "pg1.html").write_text('<html><head><style>p{margin-bottom:30px} h2{margin-top:37px;line-height:1.5} @media (max-width:640px){p{padding:0}}</style></head><body><p style="margin-top:23px">x</p></body></html>')
+    (TMP / "pages" / "nobrief.html").write_text("<html><body><p>x</p></body></html>")
+    (TMP / "src.txt").write_text("x")
+    def gate(page):
+        return sh("python3", str(TMP / "tools" / "preview_gate.py"), page, str(TMP / "src.txt"), env=sb.env())
+    r = gate(str(TMP / "pages" / "pg1.html"))
+    expect("a page with a number nobody approved gets no receipt and the number is listed", r.returncode == 1 and "37" in r.stdout and "not an approved figure" in r.stdout, r.stdout[:500])
+    expect("approved numbers, zero and a media-query width are not flagged", "the number 30" not in r.stdout and "the number 23" not in r.stdout and "the number 640" not in r.stdout, r.stdout[:600])
+    r = gate(str(TMP / "pages" / "nobrief.html"))
+    expect("a page with no filed brief gets no receipt", r.returncode == 1 and "no build brief" in r.stdout, r.stdout[:400])
+    # the GitHub check
+    gate_py = lambda: sh("python3", str(TMP / "tools" / "decision_gate.py"))
+    expect("the decision-gate check passes with no open question", gate_py().returncode == 0, gate_py().stdout)
+    ask(sb, "Which font should the header use?", "Serif", "Sans serif")
+    r = gate_py()
+    expect("the decision-gate check fails while a question is open", r.returncode == 1 and "still open" in r.stdout, r.stdout)
+    sb.prompt("Q" + str(len(reg_now())) + ": 1")
+    shf = TMP / "controls" / "START-HERE.md"
+    saved_sh = shf.read_text()
+    shf.write_text(saved_sh.replace("Text column 1220 wide.", "Text column 1000 wide."))
+    r = gate_py()
+    expect("the decision-gate check fails when START-HERE and the figures file disagree on a number", r.returncode == 1 and "figure 1" in r.stdout, r.stdout)
+    shf.write_text(saved_sh)
 
     # ---- 6b. the log keeps a short excerpt of what each tool printed, so the reviewer can check claims about results
     s11 = Sess()
@@ -385,6 +515,8 @@ def run():
     expect("a changed check file is detected at session start", "INTEGRITY FAILURE" in ctx)
     s.satisfy()
     expect("and ordinary changes are then refused", decision(s.pre("Edit", {"file_path": work + "/pages/x.html", "new_string": "x"})[1]) == "deny")
+    expect("but a session record can still be written", decision(s.pre("Write", {"file_path": work + "/records/sessions/2026-10-15-x.md", "content": "x"})[1]) is None)
+    expect("and a record cannot be used to slip in a path outside records/sessions", decision(s.pre("Write", {"file_path": work + "/records/sessions/../../pages/x.md", "content": "x"})[1]) == "deny")
     expect("but the owner can still approve repairing the checks", decision(s.pre("Edit", {"file_path": work + "/.claude/hooks/stop.py", "new_string": "x"})[1]) == "ask")
     stp.write_text(orig)
     (TMP / ".claude" / "settings.local.json").write_text('{"disableAllHooks": true}')

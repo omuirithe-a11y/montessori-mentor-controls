@@ -27,6 +27,16 @@ def _log_decision(decision, reason):
 
 _lib.DECISION_HOOK = _log_decision
 
+OPEN_Q = open_questions()
+
+
+def deny_if_open(what):
+    """While any question is open nothing is built, previewed, sent, published or pushed (owner's decision of 15 Oct 2026)."""
+    if OPEN_Q:
+        q = OPEN_Q[0]
+        deny(f"Not allowed: {what} while a question is open. {q['id']} is still open: {q['text']} Wait for the owner's answer: the owner answers by typing "
+             f"{q['id']}: <option number>. Open now: " + ", ".join(x["id"] for x in OPEN_Q) + ".")
+
 
 # ------------------------------------------------------------------ path helpers
 def norm(path: str) -> str:
@@ -53,7 +63,7 @@ def ext(path: str) -> str:
 def is_locked(path: str) -> bool:
     p = norm(path)
     r = rel(path)
-    if any(r.startswith(x) for x in cfg["locked_paths"]):
+    if r == REGISTER_REL or any(r.startswith(x) for x in cfg["locked_paths"]):
         return True
     if "/.claude/settings" in p or p.startswith(os.path.join(HOME, ".claude") + os.sep):
         return True
@@ -112,9 +122,9 @@ def push_words_given() -> bool:
 
 
 # ------------------------------------------------------------------ gates for any change
-def gate_for_change(control=False):
-    """Search before acting, START-HERE present, controls intact."""
-    if st.get("tampered") and not control:
+def gate_for_change(control=False, session_record=False):
+    """Search before acting, START-HERE present, controls intact. A session record may still be written while the integrity warning is on (owner's request, 15 Oct 2026)."""
+    if st.get("tampered") and not control and not session_record:
         deny("Not allowed: the automatic checks found that their own files were changed. "
              "Stop and tell the owner in plain English. Nothing can be changed until the owner restores them.")
     sh_path = project_dir() / cfg["start_here"]["copy_path"]
@@ -166,6 +176,8 @@ if tool in ("Edit", "Write", "NotebookEdit"):
     if is_original(path):
         deny("Not allowed: this is one of your originals (Word, PDF or photo). Originals are never edited. "
              "Work on a copy in a folder named work, copy or preview.")
+    if re.search(cfg.get("page_dir_regex", "(^|/)pages?/"), rel(path)):
+        deny_if_open("writing or changing a page file")
     if inside_root(path):
         if ext(path) in cfg["forbidden_extensions"]:
             deny("Not allowed: Word files, PDFs, photos, zips and other large file types cannot be saved in this repository.")
@@ -174,7 +186,7 @@ if tool in ("Edit", "Write", "NotebookEdit"):
             deny("Not allowed: this is larger than the " + str(cfg["max_file_bytes"] // 1000) + " KB limit for one file in this repository.")
     if is_control(path):
         change("Claude wants to change one of the automatic checks (" + rel(path) + "). Only approve if YOU asked for this change.", control=True)
-    gate_for_change()
+    gate_for_change(session_record=inside_root(path) and bool(re.match(r"records/sessions/[^/]+\.md$", rel(path))))
     if inside_root(path) or in_work_copy_folder(path):
         # An ordinary file in the repository, or in a work, copy or preview folder: no decision here.
         # Claude Code's own permission prompt decides (changed 14 Oct 2026 at the owner's request).
@@ -185,8 +197,10 @@ if tool in ("Edit", "Write", "NotebookEdit"):
 if tool == "Bash" or tool.endswith("device_bash"):
     cmd = str(ti.get("command", ""))
     SANCTIONED = re.compile(
-        r"""^\s*python3?\s+(\"?\$CLAUDE_PROJECT_DIR\"?/|\./|\"?\$HOME\"?/\.mm-controls/|~/\.mm-controls/)?(tools/(declare|search|preview_gate|measure_spacing|check_wording|size_alarm)\.py|tests/prove_it_bites\.py)(\s+[^;&|><`$]*)?\s*$""")
+        r"""^\s*python3?\s+(\"?\$CLAUDE_PROJECT_DIR\"?/|\./|\"?\$HOME\"?/\.mm-controls/|~/\.mm-controls/)?(tools/(declare|search|ask|brief|preview_gate|measure_spacing|check_wording|size_alarm)\.py|tests/prove_it_bites\.py)(\s+[^;&|><`$]*)?\s*$""")
     if tool == "Bash" and SANCTIONED.match(cmd):
+        if re.search(r"tools/(preview_gate|brief)\.py", cmd):
+            deny_if_open("issuing a preview receipt")
         allow_silently()
 
     if re.search(r"(--no-verify|core\.hooksPath|disableAllHooks|dangerously-skip-permissions|HOOK_PYTHON|CLAUDE_PROJECT_DIR\s*=)", cmd):
@@ -194,13 +208,14 @@ if tool == "Bash" or tool.endswith("device_bash"):
 
     read_only = bash_is_read_only(cmd)
 
-    locked_ref = re.search(r"(\.session/|settings\.local\.json|(~|\$HOME|/root|/home/[^/\s]+|/Users/[^/\s]+)/\.claude)", cmd)
+    locked_ref = re.search(r"(\.session/|controls/decisions\.json|settings\.local\.json|(~|\$HOME|/root|/home/[^/\s]+|/Users/[^/\s]+)/\.claude)", cmd)
     if locked_ref and not read_only:
         deny("Not allowed: this would change the automatic checks' own records or settings.")
 
     pub = re.search(cfg["publish_bash_regex"], cmd) or (
         re.search(cfg["hostinger_words_regex"], cmd) and re.search(cfg["hostinger_with_regex"], cmd))
     if pub and not read_only:
+        deny_if_open("going live")
         if not go_given():
             deny("Not allowed: nothing goes live or gets uploaded without your \"go\". "
                  "Ask the owner; the owner must type: go")
@@ -235,6 +250,7 @@ if tool == "Bash" or tool.endswith("device_bash"):
         if v:
             deny("Not allowed: the repository rules are broken: " + " | ".join(v[:6]))
     if re.search(r"\bgit\s+push\b", cmd):
+        deny_if_open("pushing to GitHub")
         if not push_words_given():
             deny("Not allowed: saving to GitHub only happens when you ask for it by name (say push, commit or GitHub). "
                  "\"Save this\" means a download link, never GitHub.")
@@ -260,6 +276,7 @@ if re.match(cfg["gate_exempt_tools_regex"], tool):
 last = tool.split("__")[-1]
 
 if re.search(cfg["publish_tool_name_regex"], tool):
+    deny_if_open("going live")
     if not go_given():
         deny("Not allowed: nothing goes live or gets uploaded without your \"go\". The owner must type: go")
     ask("Claude wants to put something on the live website. You typed go. Approve only if this is what you meant.")
@@ -282,6 +299,8 @@ if tool.endswith("device_request_delete_permission"):
     ask("Claude is asking permission to delete files on your computer. Approve only if you asked for this.")
 
 if tool in ("SendUserFile", "Artifact"):
+    if tool == "SendUserFile" or str(ti.get("action", "publish")) == "publish":
+        deny_if_open("sending a file or publishing a page")
     paths = []
     if tool == "SendUserFile":
         paths = [str(x) for x in ti.get("files", []) or []]
