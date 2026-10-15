@@ -29,6 +29,8 @@ for pat in (".claude/hooks/*", ".claude/settings.json", "controls/*", "tools/*",
     for p in sorted(root.glob(pat)):
         if p.relative_to(root).as_posix() == REGISTER_REL:
             continue  # checked separately below: it may grow (added questions, answers) but not be rewritten
+        if p.relative_to(root).as_posix() == ORDERS_REL:
+            continue  # the owner's orders grow with every message; Claude cannot write the file (pre_tool.py locks it)
         if p.is_file() and "__pycache__" not in str(p) and p.suffix != ".pyc":
             watch.append(p.relative_to(root).as_posix())
 

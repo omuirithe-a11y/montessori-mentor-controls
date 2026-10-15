@@ -34,6 +34,10 @@ def build_copy():
     # would outrank the record the test expects and fail it. The test copy starts without them.
     for note in (d / "records" / "sessions").glob("*.md"):
         note.unlink()
+    # The registers are written by the live checks while the owner works (they are not committed), so a local run would copy the owner's real
+    # questions, answers and orders into the test copy. Every test starts with empty registers, as a clean checkout in CI does.
+    for reg in ("decisions.json", "orders.json"):
+        (d / "controls" / reg).unlink(missing_ok=True)
     (d / ".claude").mkdir(exist_ok=True)
     shutil.copy2(d / "controls" / "settings.armed.json", d / ".claude" / "settings.json")
     sh("git", "init", "-q", "-b", "main", cwd=d)
@@ -314,7 +318,7 @@ def run():
     sp3.pre("Bash", {"command": "gh api repos/a/b/issues -X POST"})
     logged_d = [json.loads(l) for l in (TMP / ".session" / sp3.sid / "log.jsonl").read_text().splitlines() if '"decision"' in l]
     expect("a refused attempt is written to the log", any(r.get("event") == "decision" and r.get("decision") == "deny" for r in logged_d), str(logged_d))
-    (TMP / "rv_echo.py").write_text('import sys\nopen(sys.argv[1], "w").write(sys.stdin.read())\nprint(\'{"unsupported": []}\')\n')
+    (TMP / "rv_echo.py").write_text('import sys\nopen(sys.argv[1], "a").write(sys.stdin.read())\nprint(\'{"unsupported": []}\')\n')
     sp4 = Sess(); sp4.satisfy()
     sp4.pre("Bash", {"command": "gh api repos/a/b/issues -X POST"})
     seen = TMP / "rv_seen.txt"
@@ -662,6 +666,38 @@ def run():
         expect("if the page's fonts are not loaded, no measurement is taken", "error" in measure_spacing.run(str(pc), "desktop", str(fp1), "baseline_to_capheight"))
     except ImportError as e:
         expect("spacing tool tests (needs the browser tools)", False, str(e))
+
+    # ---- 6f. the owner's orders (owner's decision of 15 Oct 2026, Q2 option 1)
+    def orders_now():
+        return json.loads((TMP / "controls" / "orders.json").read_text())["orders"]
+
+    def order_tool(sess, *a):
+        return sh("python3", str(TMP / "tools" / "order.py"), *a, env=sess.env())
+    so = Sess("Never mention the green boxes again."); so.satisfy()
+    expect("every owner message is recorded word for word", any(o["words"] == "Never mention the green boxes again." for o in orders_now()), str(orders_now())[:300])
+    expect("a message that drops a topic is marked as a drop", orders_now()[-1]["drop"] is True)
+    rc, out, _ = so.stop("Understood." + foot_all)
+    expect("a reply is refused while the dropped topic has no recorded term", "no term has been recorded" in reason_of(out), reason_of(out)[:300])
+    r = order_tool(so, "drop", "purple triangles")
+    expect("a term the owner did not type cannot be recorded", r.returncode == 1 and "NOT RECORDED" in r.stdout, r.stdout)
+    r = order_tool(so, "drop", "green boxes")
+    expect("a term in the owner's own words is recorded", r.returncode == 0 and "RECORDED" in r.stdout and orders_now()[-1]["terms"] == ["green boxes"], r.stdout)
+    rc, out, _ = so.stop("The green boxes are ready." + foot_all)
+    expect("a reply that mentions a dropped topic is refused", "told you to drop" in reason_of(out) and "green boxes" in reason_of(out), reason_of(out)[:300])
+    rc, out, _ = so.stop("Understood." + foot_all)
+    expect("a reply that leaves the dropped topic out is not refused for it", "told you to drop" not in reason_of(out) and "no term has been recorded" not in reason_of(out), reason_of(out)[:300])
+    sn = Sess("Hi."); sn.satisfy()
+    rc, out, _ = sn.stop("The green boxes are ready." + foot_all)
+    expect("a dropped topic stays dropped in a later session", "told you to drop" in reason_of(out), reason_of(out)[:300])
+    expect("Claude cannot edit the orders with the file tools", decision(so.pre("Edit", {"file_path": str(TMP / "controls" / "orders.json"), "new_string": "x"})[1]) == "deny")
+    expect("Claude cannot change the orders with a shell command", decision(so.pre("Bash", {"command": "sed -i s/true/false/ controls/orders.json"})[1]) == "deny")
+    rc, out, _ = so.prompt("Please tell me the time.")
+    expect("the owner's latest message is shown to Claude word for word", "Please tell me the time." in json.dumps(out) and "green boxes" in json.dumps(out), json.dumps(out)[:300])
+    (TMP / "rv_orders.py").write_text('import sys\nprint(\'{"unsupported": [], "problems": ["the reply does not answer the request: no time given"]}\')\n')
+    sr = Sess("Please tell me now."); sr.satisfy()
+    rc, out, _ = hook("stop", dict(sr.base, hook_event_name="Stop", last_assistant_message="Answer." + foot_all),
+                      env_extra={"MM_REVIEWER_DISABLE": "", "MM_REVIEWER_CMD": f"python3 {TMP / 'rv_orders.py'}"})
+    expect("the second reviewer refuses a reply that misses what the owner's message asked", "owner's latest message" in reason_of(out) and "no time given" in reason_of(out), reason_of(out)[:300])
 
     shutil.rmtree(TMP, ignore_errors=True)
 

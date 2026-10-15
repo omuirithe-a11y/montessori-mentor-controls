@@ -586,6 +586,76 @@ def read_prompts(session_id) -> list:
     return out
 
 
+# ---------------------------------------------------------------- the owner's orders (owner's decision of 15 Oct 2026, Q2: option 1)
+ORDERS_REL = "controls/orders.json"
+ORDERS_ABOUT = ("Every instruction the owner has typed, word for word, and the topics the owner has told Claude to drop. Only the automatic checks "
+                "write this file (tools/order.py records the terms of a dropped topic, and only terms that are in the owner's own message). "
+                "Each reply is compared with the owner's latest message and with these orders; a reply that mentions a dropped topic is refused.")
+
+
+def orders_path() -> Path:
+    return project_dir() / ORDERS_REL
+
+
+def read_orders() -> dict:
+    try:
+        d = json.loads(orders_path().read_text(encoding="utf-8"))
+        if isinstance(d, dict) and isinstance(d.get("orders"), list):
+            return d
+    except Exception:
+        pass
+    return {"version": 1, "about": ORDERS_ABOUT, "orders": []}
+
+
+def write_orders(d: dict) -> None:
+    p = orders_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(".tmp")
+    tmp.write_text(json.dumps(d, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    os.replace(tmp, p)
+
+
+def record_order(session_id, turn: int, words: str, drop: bool) -> dict:
+    """Stores the owner's message word for word. A bare answer to a question ('Q2: 1') or a one-word go/push is not an order."""
+    d = read_orders()
+    text = (words or "").strip()[:2000]
+    if not text or ANSWER_RE.fullmatch(text) or len(text.split()) < 2:
+        return {}
+    nums = [int(re.sub(r"\D", "", str(o.get("id", "O0"))) or 0) for o in d["orders"]]
+    o = {"id": "O" + str(max(nums + [0]) + 1), "date": time.strftime("%Y-%m-%d"), "session": safe_id(session_id), "turn": turn,
+         "words": text, "drop": bool(drop), "terms": [], "active": True}
+    d["orders"].append(o)
+    write_orders(d)
+    return o
+
+
+def drop_terms_ok(terms: list, owner_words: str) -> list:
+    """Only words the owner actually typed may be recorded as a dropped topic (Claude cannot invent a ban or hide one)."""
+    low = " " + normalise_quote(owner_words) + " "
+    return [t for t in terms if t.strip() and " " + normalise_quote(t) + " " in low]
+
+
+def add_drop_terms(session_id, turn: int, terms: list) -> dict:
+    d = read_orders()
+    for o in reversed(d["orders"]):
+        if o.get("session") == safe_id(session_id) and o.get("turn") == turn and o.get("drop"):
+            ok = drop_terms_ok(terms, o.get("words", ""))
+            o["terms"] = sorted(set(o.get("terms", [])) | {t.strip() for t in ok})
+            write_orders(d)
+            return o
+    return {}
+
+
+def active_drop_terms() -> list:
+    """[(term, order)] for every topic the owner has told Claude to drop."""
+    return [(t, o) for o in read_orders()["orders"] if o.get("drop") and o.get("active", True) for t in o.get("terms", []) if t.strip()]
+
+
+def dropped_mentions(text: str) -> list:
+    low = " " + normalise_quote(text) + " "
+    return [(t, o) for t, o in active_drop_terms() if " " + normalise_quote(t) + " " in low]
+
+
 def canon_number(x) -> str:
     f = float(x)
     return str(int(f)) if f == int(f) else str(f)
