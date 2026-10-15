@@ -281,6 +281,12 @@ def run():
     rc, out, _ = stop_with(s10, good9, "rv_crash.py")
     expect("a reviewer that cannot run does not block the reply", (out or {}).get("decision") != "block", reason_of(out))
 
+    # ---- 6b. the log keeps a short excerpt of what each tool printed, so the reviewer can check claims about results
+    s11 = Sess()
+    s11.post("Bash", {"command": "git log --oneline -1"}, {"stdout": "aeca4fb a commit message"})
+    logged = [r for r in json.loads("[" + ",".join((TMP / ".session" / s11.sid / "log.jsonl").read_text().splitlines()) + "]") if r.get("event") == "tool"]
+    expect("the log keeps an excerpt of what a tool printed", logged and "aeca4fb" in logged[-1].get("result", ""), str(logged[-1:]))
+
     # ---- 6c. the optional user-level copy (item 5): runs the checks from outside the repository, never twice inside it
     fake_home = Path(tempfile.mkdtemp(prefix="home_"))
     shutil.copytree(TMP, fake_home / ".mm-controls", ignore=shutil.ignore_patterns(".session", "__pycache__", "rv_*.py"))
