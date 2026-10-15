@@ -63,6 +63,12 @@ def reason(out):
     return (out or {}).get("hookSpecificOutput", {}).get("permissionDecisionReason", "")
 
 
+def set_scope(value):
+    """The live setting is 'session' (owner's decision of 15 Oct 2026). Tests of the per-reply search rules switch the test copy to 'turn' for their own block, then back."""
+    f = TMP / "controls" / "config.json"
+    f.write_text(re.sub(r'"search_scope":\s*"[a-z]+"', '"search_scope": "' + value + '"', f.read_text(encoding="utf-8")), encoding="utf-8")
+
+
 class Sess:
     def __init__(self, prompt="Hi."):
         self.sid = "t" + uuid.uuid4().hex[:8]
@@ -187,7 +193,10 @@ def run():
     expect("writing a file outside the repository and any work folder needs a click", decision(s.pre("Write", {"file_path": "/x/notes.txt", "content": "x"})[1]) == "ask")
     expect("editing a control file still needs a click", decision(s.pre("Edit", {"file_path": work + "/controls/config.json", "new_string": "x"})[1]) == "ask")
     s.prompt("next question")
-    expect("search must be repeated in the next reply", decision(s.pre("Edit", {"file_path": work + "/pages/x.html", "new_string": "x"})[1]) == "deny")
+    expect("with search_scope session, a search stays valid in the next reply", decision(s.pre("Edit", {"file_path": work + "/pages/x.html", "new_string": "x"})[1]) is None)
+    set_scope("turn")
+    expect("with search_scope turn, the search must be repeated in the next reply", decision(s.pre("Edit", {"file_path": work + "/pages/x.html", "new_string": "x"})[1]) == "deny")
+    set_scope("session")
     expect("read-only commands pass untouched", s.pre("Bash", {"command": "ls -la"})[1] is None)
     expect("searching is never blocked", s.pre("Grep", {"pattern": "x"})[1] is None)
 
@@ -461,6 +470,7 @@ def run():
 
     # ---- 6b. the search must be the owner's, and used (the owner's decision of 14 Oct 2026)
     footer = f"\nSearched: {places}\nCouldn't search: none"
+    set_scope("turn")  # these rules apply when search_scope is turn; with session they are off by design
     s = Sess("Is the beige line 30 above the section?")
     rc, out, _ = s.prompt("Is the beige line 30 above the section?")
     ctx = (out or {}).get("hookSpecificOutput", {}).get("additionalContext", "")
@@ -491,6 +501,7 @@ def run():
     s = Sess("Let's change the text column width from 1220."); s.satisfy()
     rc, out, _ = s.stop("Do you want the text column wider than 1220?" + footer)
     expect("the owner can reopen a settled question", "but that is settled" not in reason_of(out), reason_of(out))
+    set_scope("session")
     s = Sess("Hi."); s.satisfy(skip=("Read",))
     rc, out, _ = s.stop("START-HERE says the column is 1220." + footer)
     expect("leaning on a record that was not read is refused", (out or {}).get("decision") == "block" and "leans on" in reason_of(out), reason_of(out))

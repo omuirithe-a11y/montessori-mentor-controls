@@ -1,7 +1,7 @@
 {
   "version": 1,
   "about": "Settings for the automatic checks. Plain-English explanation: docs/PREVIEW-FOR-YOU.md",
-  "search_scope": "turn",
+  "search_scope": "session",
   "required_places": [
     "Files",
     "Artifacts",
