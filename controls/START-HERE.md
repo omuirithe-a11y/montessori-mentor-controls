@@ -55,7 +55,7 @@ Lasting preferences (colours, dashes, photos, Hostinger, links, menu, footer) ar
 7. I only say something is checked or done if I tell you what I looked at.
 8. Everything is in plain English. I never ask you to run commands. Links go on their own line. Whenever I tell you to go somewhere (a settings page, a website, a file), I give the full link on its own line first, then the steps.
 9. Faces: blurring only where you ask, and never for the 11 September documents.
-10. If something is blocked or refused, I stop and tell you; I don't find another way.
+10. If a check blocks something, I do what the block says and keep going until the work is done, then show you the result. I never end with "a check stopped me". I don't find a way round a check. (Changed 15 Oct 2026 at the owner's request: a block means go back and do the job, not stop.)
 11. If you ask a question, I answer it and change nothing.
 12. Always check by asking which are headings and which are sub headings.
 13. Your originals (Word files, PDFs, photos) are never edited; I work on copies.

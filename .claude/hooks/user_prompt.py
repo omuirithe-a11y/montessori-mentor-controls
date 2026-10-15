@@ -27,7 +27,8 @@ lines = ["SEARCH FIRST, BEFORE WRITING A WORD OF THE REPLY (the owner's standing
          + (": " + ", ".join(content) if content else " (this message has no content words; the run still records that)") + ".",
          "2. Search Google Drive, Artifacts, Claude docs and Skills with the same words. The Drive query must carry one of them.",
          "3. In the reply, quote what was found word for word. Never say nothing was found while the search log holds matches.",
-         "4. Do not ask about anything the settled list (controls/settled.json) already answers; use the answer."]
+         "4. Do not ask about anything the settled list (controls/settled.json) already answers; use the answer.",
+         "5. If a check blocks the reply, that is an instruction to go back and do the missing work, not a place to stop. Keep searching (wider words, more places, a fresh subagent) until the result can be shown. Never end with \"a check stopped me\"."]
 touched = settled_matches(prompt, load_settled()) if content else []
 if touched:
     lines.append("SETTLED DECISIONS THIS MESSAGE TOUCHES - use them, do not ask about them:")

@@ -37,7 +37,10 @@
     "not linked to this computer",
     "blocked by a control"
   ],
-  "max_blocks_per_reply": 5,
+  "max_blocks_per_reply": 60,
+  "ceiling_extra_blocks": 5,
+  "min_drive_queries_for_not_found": 3,
+  "stop_excuse_regex": "(?i)(\\bI (will |'ll |must |have to )?stop here\\b|\\b(gate|hook|hooks|check|checks|control|controls) (has |have )?(stopped|blocked|prevented|refused) me\\b|\\bI (can'?t|cannot|am unable to|am not able to) (go on|continue|proceed|carry on)\\b|\\bI have stopped\\b|\\bfull stop\\b)",
   "forbidden_extensions": [
     ".docx",
     ".doc",

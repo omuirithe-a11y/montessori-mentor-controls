@@ -223,9 +223,15 @@ def run():
     expect("'Looked at' naming something really read is accepted", (out or {}).get("decision") != "block")
     s3 = Sess()
     last = None
-    for _ in range(7):
+    for _ in range(61):
         rc, last, _ = s3.stop("no footer")
-    expect("a check cannot loop forever, and the owner is told when it lets a reply through", "systemMessage" in (last or {}))
+    expect("after 60 tries a reply is still not let through; it is told to give a best-result report", (last or {}).get("decision") == "block" and "Best result so far" in str((last or {}).get("reason", "")))
+    rc, last, _ = s3.stop("Best result so far: none yet.\nStill not searched or found: everything.\nSearched: none\nCouldn't search: none")
+    expect("a best-result report ends the loop and the owner is told", "systemMessage" in (last or {}))
+    s4 = Sess()
+    rc, out, _ = s4.stop("The gate stopped me, so I stop here.")
+    expect("a block message tells Claude to keep going and names the next step", (out or {}).get("decision") == "block" and "KEEP GOING" in reason_of(out) and "NEXT STEP" in reason_of(out))
+    expect("'a check stopped me' is refused as an ending", "stopped" in reason_of(out) and "carry on" in reason_of(out))
 
     # ---- 6b. the search must be the owner's, and used (the owner's decision of 14 Oct 2026)
     footer = f"\nSearched: {places}\nCouldn't search: none"
