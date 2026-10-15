@@ -30,6 +30,10 @@ def build_copy():
             shutil.copytree(item, d / item.name, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
         else:
             shutil.copy2(item, d / item.name)
+    # The real session notes are the owner's history, not test material: a note that happens to use a test's search words (for example "beige line")
+    # would outrank the record the test expects and fail it. The test copy starts without them.
+    for note in (d / "records" / "sessions").glob("*.md"):
+        note.unlink()
     (d / ".claude").mkdir(exist_ok=True)
     shutil.copy2(d / "controls" / "settings.armed.json", d / ".claude" / "settings.json")
     sh("git", "init", "-q", "-b", "main", cwd=d)
