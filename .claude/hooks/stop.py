@@ -160,6 +160,25 @@ if re.search(cfg.get("records_claim_regex", "$^"), body):
         problems.append("The reply leans on what a record says (START-HERE, the project instructions, the records or the settled list), "
                         "but nothing in this reply read or searched them. Read the file, then quote it.")
 
+# (7) "blocked, so I stop" is not an allowed ending: a block is an instruction to do the work (owner's decision, 15 Oct 2026)
+if re.search(cfg.get("stop_excuse_regex", "$^"), body):
+    problems.append("The reply says a check or gate stopped the work. A block is an instruction to fix the problem and carry on, "
+                    "not a place to stop. Do the next step in the ladder below, then present the result.")
+
+# (8) "nothing found" is only accepted after an exhaustive search: every place covered and Drive searched with several queries
+if re.search(cfg.get("not_found_regex", "$^"), body) and content and turn > 0:
+    drive_q = {t.lower() for r in log if r.get("ok") and "Google Drive" in r.get("places", [])
+               for t in r.get("targets", []) if isinstance(t, str) and len(t) > 12}
+    need_q = min(int(cfg.get("min_drive_queries_for_not_found", 3)), len(content))
+    if len(drive_q) < need_q:
+        problems.append(f"The reply says something was not found, but Google Drive was searched with only {len(drive_q)} different "
+                        f"quer{'y' if len(drive_q) == 1 else 'ies'} (at least {need_q} are needed). Search Drive again, one query per word: "
+                        + ", ".join(content[:8]) + ".")
+    unsearched = [p for p in cfg["required_places"] if p not in ok_places and p not in declared]
+    if unsearched:
+        problems.append("The reply says something was not found, but these places were not searched in this reply: "
+                        + ", ".join(unsearched) + ". Search each one, then answer.")
+
 # (6) a settled question is refused with its answer, unless the owner raised it themselves this turn
 settled = load_settled()
 if settled:
@@ -175,13 +194,39 @@ if settled:
 if not problems:
     sys.exit(0)
 
+LADDER = [
+    "Do exactly what the problems above say, then finish the reply again.",
+    "Run python3 tools/search.py if you have not, then search each place named above with a tool call (Google Drive, Artifacts with limit 200, Claude docs, Skills). One call per place.",
+    "Search again with different words: every word of the owner's message, its other spellings (singular/plural, with and without hyphens), and each file name or title the owner mentioned.",
+    "Widen the search: list Google Drive's recent files, open the folders the owner's documents live in, list all Artifacts to 200, and search the other GitHub repositories and the git history.",
+    "Hand the search to a fresh subagent (Agent tool, Explore type): give it only the owner's words and the places, ask for file paths and quotations, and use what it returns.",
+    "If a place truly cannot be reached, record it with tools/declare.py with the exact reason, search every other place, and carry on with the best result the other places support.",
+]
+
 blocks = st.setdefault("blocks", {})
 blocks["stop"] = int(blocks.get("stop", 0)) + 1
+n = blocks["stop"]
 save_state(sid, st)
-if blocks["stop"] > int(cfg.get("max_blocks_per_reply", 5)):
-    append_log(sid, {"turn": turn, "event": "VIOLATION", "problems": problems})
-    print(json.dumps({"systemMessage": "A check was not satisfied after several tries and the reply was let through. "
-                                       "Problems: " + " | ".join(problems[:4])}))
+ceiling = int(cfg.get("max_blocks_per_reply", 60))
+extra = int(cfg.get("ceiling_extra_blocks", 5))
+step = LADDER[min((n - 1) // 2, len(LADDER) - 1)]
+KEEP = ("KEEP GOING. This is an instruction to do the work, not a reason to stop. Do not tell the owner you are blocked or stopped, "
+        "do not ask the owner anything, do not look for a way round the check. Fix the problems, then present the finished result.")
+
+if n > ceiling:
+    has_report = re.search(r"(?im)^\W*best result so far\s*:", msg) and re.search(r"(?im)^\W*still not searched or found\s*:", msg)
+    if has_report or n > ceiling + extra:
+        append_log(sid, {"turn": turn, "event": "VIOLATION", "problems": problems})
+        print(json.dumps({"systemMessage": "A check was not satisfied after " + str(n - 1) + " tries and the reply was let through. "
+                                           "Problems: " + " | ".join(problems[:4])}))
+        sys.exit(0)
+    print(json.dumps({"decision": "block", "reason": "Reply not finished after " + str(ceiling) + " tries. Do not stop and do not give up. "
+        "Give the owner a useful ending: a line 'Best result so far: <the best answer the searches support, with quotations>' and a line "
+        "'Still not searched or found: <exactly what is left and what you would try next>', then the Searched / Couldn't search / Looked at lines. "
+        "Problems still open:\n- " + "\n- ".join(problems[:10])}))
     sys.exit(0)
-print(json.dumps({"decision": "block", "reason": "Reply not finished. Fix these, then finish again:\n- " + "\n- ".join(problems[:10])}))
+
+append_log(sid, {"turn": turn, "event": "stop_block", "n": n, "problems": problems[:10]})
+print(json.dumps({"decision": "block", "reason": KEEP + f"\n\nTry {n} of {ceiling}. Problems:\n- " + "\n- ".join(problems[:10])
+                  + "\n\nNEXT STEP: " + step}))
 sys.exit(0)

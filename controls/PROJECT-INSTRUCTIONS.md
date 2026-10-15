@@ -21,6 +21,10 @@ Looked at: <what you looked at, separated by semicolons>   (required whenever th
 Allowed reasons for "Couldn't search": not offered in this session; tool call failed; not linked to this computer; blocked by a control.
 If a place is not offered in this session, record it once with: python3 tools/declare.py "<place>" "<reason>"
 
+# When a check blocks (the owner's decision of 15 Oct 2026)
+
+A block is an instruction to go back and do the job, not a place to stop. The block message names the next step; do it, search again with wider words and more places, hand the search to a fresh subagent if needed, and present the finished result. A reply that says nothing was found is only accepted after Google Drive was searched with at least three different queries and every place is accounted for. A reply that ends with "the gate stopped me" is refused. After many tries a reply must still end usefully with "Best result so far:" and "Still not searched or found:" lines.
+
 # The search itself (the owner's decision of 14 Oct 2026, enforced by the checks)
 
 Before anything is written: python3 tools/search.py  (no arguments: it searches this repository and records/ with the words of the owner's message, and prints them). Then Google Drive, Artifacts, Claude docs and Skills are searched with the same words; the Drive query must carry one of them.
