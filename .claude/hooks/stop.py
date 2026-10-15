@@ -4,6 +4,7 @@
 (4) what the search found is quoted in the reply, (5) the reply does not say nothing was found while the log holds matches
 or lean on a record it did not read, and (6) the reply does not ask a question the settled list already answers."""
 import json
+import os
 import re
 from lib import *
 
@@ -58,6 +59,7 @@ def mentioned(line):
 
 
 foot, body = footer_lines(msg)
+uq = unquoted(body)  # the reply without its quotations: a phrase quoted as an example is not the reply's own words
 use = (lambda r: r.get("turn") == turn) if cfg.get("search_scope", "turn") == "turn" else (lambda r: True)
 log = [r for r in read_log(sid) if r.get("event") == "tool" and use(r)]
 ok_places = set(p for r in log if r.get("ok") for p in r.get("places", []))
@@ -147,7 +149,7 @@ if message_search:
 
     # (5) "nothing found" is refused while the log holds matches
     total_strong = sum(int(d.get("strong", 0)) for d in (message_search.get("places") or {}).values())
-    if total_strong and re.search(cfg.get("not_found_regex", "$^"), body):
+    if total_strong and re.search(cfg.get("not_found_regex", "$^"), uq):
         files = sorted({l["file"] for d in message_search["places"].values() for l in d.get("lines", []) if l.get("strong")})[:6]
         problems.append('The reply says nothing was found, but the search log holds strong matches in: ' + ", ".join(files) + ". Say what they say.")
 
@@ -161,12 +163,12 @@ if re.search(cfg.get("records_claim_regex", "$^"), body):
                         "but nothing in this reply read or searched them. Read the file, then quote it.")
 
 # (7) "blocked, so I stop" is not an allowed ending: a block is an instruction to do the work (owner's decision, 15 Oct 2026)
-if re.search(cfg.get("stop_excuse_regex", "$^"), body):
+if re.search(cfg.get("stop_excuse_regex", "$^"), uq):
     problems.append("The reply says a check or gate stopped the work. A block is an instruction to fix the problem and carry on, "
                     "not a place to stop. Do the next step in the ladder below, then present the result.")
 
 # (8) "nothing found" is only accepted after an exhaustive search: every place covered and Drive searched with several queries
-if re.search(cfg.get("not_found_regex", "$^"), body) and content and turn > 0:
+if re.search(cfg.get("not_found_regex", "$^"), uq) and content and turn > 0:
     drive_q = {t.lower() for r in log if r.get("ok") and "Google Drive" in r.get("places", [])
                for t in r.get("targets", []) if isinstance(t, str) and len(t) > 12}
     need_q = min(int(cfg.get("min_drive_queries_for_not_found", 3)), len(content))
@@ -184,12 +186,58 @@ settled = load_settled()
 if settled:
     owner_text = str(st.get("last_prompt", ""))
     owner_touched = {e.get("id") for e, _ in settled_matches(owner_text, settled)} if content else set()
-    for q in questions_in(body):
+    for q in questions_in(uq):
         for e, present in settled_matches(q, settled):
             if e.get("id") in owner_touched:
                 continue
             problems.append(f'The reply asks "{q[:120]}", but that is settled ({e.get("date", "")}): {e.get("answer", "")} '
                             f'Use the answer instead of asking. (Matched: {", ".join(present)}; source: {e.get("source", "")}.)')
+
+# (9) a file the reply says was made must exist (owner's decision, 15 Oct 2026: "done" claims are tested, not trusted)
+FILE_TOKEN = re.compile(r"(?<![\w/:.@-])([\w][\w.\-]*\.(?:" + cfg.get("file_claim_extensions", "docx|pdf|html|md|json|py") + r"))(?![\w])")
+plain = re.sub(r"https?://\S+", " ", body)
+for sentence in re.split(r"(?<=[.!?])\s+|\n", plain):
+    if not re.search(cfg.get("file_claim_verbs_regex", "$^"), sentence) or re.search(cfg.get("file_claim_negation_regex", "$^"), sentence):
+        continue
+    for name in sorted(set(FILE_TOKEN.findall(sentence))):
+        if not file_exists_anywhere(name):
+            problems.append(f'The reply says "{name}" was made, but no file with that name exists on this computer. '
+                            "Make the file (or find where it really is), then say so; never say a file exists that does not.")
+
+# (10) the independent reviewer: a second model compares the reply with this turn's tool log (owner's decision, 15 Oct 2026)
+rv = cfg.get("claim_reviewer", {})
+if not problems and rv.get("enabled") and not os.environ.get("MM_REVIEWER_DISABLE") and not os.environ.get("MM_REVIEWER") and body.strip():
+    import shlex
+    import subprocess
+    import tempfile
+    events = []
+    for r in log[-80:]:
+        tg = "; ".join(str(t)[:110] for t in r.get("targets", [])[:3])
+        events.append(f"- {r.get('places') or ''} {'ok' if r.get('ok') else 'FAILED'}: {tg}")
+    prompt = ("You are an independent auditor. Below are (A) an assistant's final reply to its owner and (B) the log of every tool call "
+              "the assistant made this turn. List each statement in A that claims something was searched, found, read, created, sent, "
+              "fixed, verified, counted or merged where B gives no support for it. Ignore opinions, plans, offers and questions. "
+              'Answer with only JSON: {"unsupported": ["<short quotation>: <why it is unsupported>"]} and an empty list when everything is supported.\n\n'
+              "(A) REPLY:\n" + body[:6000] + "\n\n(B) TOOL LOG:\n" + ("\n".join(events) or "(no tool calls)"))
+    cmd = shlex.split(os.environ["MM_REVIEWER_CMD"]) if os.environ.get("MM_REVIEWER_CMD") else list(rv.get("command", []))
+    verdict = None
+    try:
+        res = subprocess.run(cmd, input=prompt, capture_output=True, text=True, timeout=int(rv.get("timeout_seconds", 90)),
+                             cwd=tempfile.gettempdir(), env=dict(os.environ, MM_REVIEWER="1"))
+        m = re.search(r"\{.*\}", res.stdout, re.S)
+        verdict = json.loads(m.group(0)) if m else None
+    except Exception as exc:
+        append_log(sid, {"turn": turn, "event": "reviewer_unavailable", "why": str(exc)[:200]})
+    if isinstance(verdict, dict) and verdict.get("unsupported"):
+        n_rv = int(st.setdefault("blocks", {}).get("review", 0)) + 1
+        st["blocks"]["review"] = n_rv
+        save_state(sid, st)
+        if n_rv <= int(rv.get("max_blocks_per_reply", 2)):
+            problems.append("An independent reviewer compared the reply with this turn's tool log and found claims the work does not support: "
+                            + " | ".join(str(x)[:240] for x in verdict["unsupported"][:5])
+                            + ". Do the missing work (or remove the claim), then finish again.")
+        else:
+            append_log(sid, {"turn": turn, "event": "reviewer_overruled_after_tries", "unsupported": verdict["unsupported"][:5]})
 
 if not problems:
     sys.exit(0)

@@ -41,6 +41,7 @@ def build_copy():
 def hook(name, event, env_extra=None):
     env = dict(os.environ, CLAUDE_PROJECT_DIR=str(TMP))
     env.pop("HOOK_PYTHON", None)
+    env["MM_REVIEWER_DISABLE"] = "1"  # the reviewer (a second model) is off in the tests unless a test turns it on with a fake one
     env.update(env_extra or {})
     r = sh("sh", str(TMP / ".claude" / "hooks" / "run.sh"), name, env=env, input=json.dumps(event))
     out = None
@@ -232,6 +233,68 @@ def run():
     rc, out, _ = s4.stop("The gate stopped me, so I stop here.")
     expect("a block message tells Claude to keep going and names the next step", (out or {}).get("decision") == "block" and "KEEP GOING" in reason_of(out) and "NEXT STEP" in reason_of(out))
     expect("'a check stopped me' is refused as an ending", "stopped" in reason_of(out) and "carry on" in reason_of(out))
+
+    # ---- 6a. the owner's decisions of 15 Oct 2026: quotations, file claims, read-only lookups, one-command declare, the reviewer
+    s5 = Sess(); s5.satisfy()
+    foot_all = f"\nSearched: {places}\nCouldn't search: none"
+    rc, out, _ = s5.stop('An example of a refused ending is "the gate stopped me, so I stop here" and nothing else.' + foot_all)
+    expect("a phrase inside quotation marks is not read as the reply's own words", (out or {}).get("decision") != "block", reason_of(out))
+    rc, out, _ = s5.stop("The gate stopped me, so I stop here." + foot_all)
+    expect("the same phrase used for real is still refused", (out or {}).get("decision") == "block")
+    s6 = Sess(); s6.satisfy()
+    foot_l = foot_all + "\nLooked at: PROJECT-INSTRUCTIONS.md"
+    rc, out, _ = s6.stop("I created Missing-Report-xyz.docx for you." + foot_l)
+    expect("a reply saying a file was made is refused when no such file exists", (out or {}).get("decision") == "block" and "Missing-Report-xyz.docx" in reason_of(out))
+    (TMP / "Real-Report-xyz.docx").write_bytes(b"x")
+    rc, out, _ = s6.stop("I created Real-Report-xyz.docx for you." + foot_l)
+    expect("the same claim is accepted when the file exists", (out or {}).get("decision") != "block", reason_of(out))
+    rc, out, _ = s6.stop("I did not create Missing-Report-xyz.docx." + foot_l)
+    expect("saying a file was NOT made is not refused", (out or {}).get("decision") != "block", reason_of(out))
+    s7 = Sess()
+    expect("a read-only GitHub lookup is allowed", decision(s7.pre("Bash", {"command": "gh pr list --repo a/b"})[1]) is None)
+    expect("a read-only GitHub API read is allowed", decision(s7.pre("Bash", {"command": "gh api repos/a/b/pulls/1"})[1]) is None)
+    expect("a GitHub write is still gated", decision(s7.pre("Bash", {"command": "gh api repos/a/b/issues -X POST"})[1]) == "deny")
+    s8 = Sess()
+    r = sh("python3", str(TMP / "tools" / "declare.py"), "--cloud-defaults", env=s8.env())
+    expect("one command records the five places a cloud session never offers", r.returncode == 0 and r.stdout.count("Recorded") == 5, r.stdout + r.stderr)
+    expect("the one-command declare needs no click", decision(s8.pre("Bash", {"command": "python3 tools/declare.py --cloud-defaults"})[1]) is None)
+    r = sh("python3", str(TMP / "tools" / "declare.py"), "--places", "not offered in this session", "Skills and plugins", env=s8.env())
+    expect("several places with one reason are recorded in one command", r.returncode == 0 and "Skills and plugins" in r.stdout, r.stdout + r.stderr)
+    (TMP / "rv_bad.py").write_text('import sys, json\nsys.stdin.read()\nprint(json.dumps({"unsupported": ["I read the file: no read is in the log"]}))\n')
+    (TMP / "rv_ok.py").write_text('import sys\nsys.stdin.read()\nprint(\'{"unsupported": []}\')\n')
+    (TMP / "rv_crash.py").write_text("import sys\nsys.exit(3)\n")
+
+    def stop_with(sess, msg, script):
+        return hook("stop", dict(sess.base, hook_event_name="Stop", last_assistant_message=msg),
+                    env_extra={"MM_REVIEWER_DISABLE": "", "MM_REVIEWER_CMD": f"python3 {TMP / script}"})
+    s9 = Sess(); s9.satisfy()
+    good9 = "Answer." + foot_all
+    rc, out, _ = stop_with(s9, good9, "rv_bad.py")
+    expect("the independent reviewer can refuse a reply whose claims the log does not support",
+           (out or {}).get("decision") == "block" and "independent reviewer" in reason_of(out), reason_of(out))
+    stop_with(s9, good9, "rv_bad.py")
+    rc, out, _ = stop_with(s9, good9, "rv_bad.py")
+    expect("the reviewer cannot loop: after two refusals it lets the reply through", (out or {}).get("decision") != "block", reason_of(out))
+    s10 = Sess(); s10.satisfy()
+    rc, out, _ = stop_with(s10, good9, "rv_ok.py")
+    expect("a reviewer that finds nothing lets the reply through", (out or {}).get("decision") != "block", reason_of(out))
+    rc, out, _ = stop_with(s10, good9, "rv_crash.py")
+    expect("a reviewer that cannot run does not block the reply", (out or {}).get("decision") != "block", reason_of(out))
+
+    # ---- 6c. the optional user-level copy (item 5): runs the checks from outside the repository, never twice inside it
+    fake_home = Path(tempfile.mkdtemp(prefix="home_"))
+    shutil.copytree(TMP, fake_home / ".mm-controls", ignore=shutil.ignore_patterns(".session", "__pycache__", "rv_*.py"))
+    shutil.copy2(TMP / "tools" / "mm-controls-bootstrap.sh", fake_home / ".mm-controls-bootstrap.sh")
+    elsewhere = Path(tempfile.mkdtemp(prefix="elsewhere_"))
+    ul_cmd = json.loads((TMP / "controls" / "user-level-settings.json").read_text())["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"]
+    ul_ev = json.dumps({"session_id": "u" + uuid.uuid4().hex[:6], "hook_event_name": "UserPromptSubmit", "prompt": "Where is the beige line?"})
+    ul_env = dict(os.environ, HOME=str(fake_home), CLAUDE_PROJECT_DIR=str(elsewhere))
+    r = sh("sh", "-c", ul_cmd, cwd=elsewhere, env=ul_env, input=ul_ev)
+    expect("from a folder outside the repository the user-level copy runs the checks", r.returncode == 0 and ".mm-controls/tools/search.py" in r.stdout, r.stdout[:200] + r.stderr[:200])
+    r = sh("sh", "-c", ul_cmd, cwd=TMP, env=dict(ul_env, CLAUDE_PROJECT_DIR=str(TMP)), input=ul_ev)
+    expect("inside the repository the user-level copy does nothing, so the checks never run twice", r.returncode == 0 and not r.stdout.strip(), r.stdout[:200])
+    r = sh("sh", "-c", ul_cmd, cwd=elsewhere, env=dict(ul_env, HOME=tempfile.mkdtemp(prefix="nohome_"), MM_CONTROLS_REPO="/nonexistent/repo"), input=ul_ev)
+    expect("if the approved copy cannot be fetched, the action is blocked", r.returncode == 2, str(r.returncode) + r.stderr[:200])
 
     # ---- 6b. the search must be the owner's, and used (the owner's decision of 14 Oct 2026)
     footer = f"\nSearched: {places}\nCouldn't search: none"

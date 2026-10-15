@@ -1,4 +1,7 @@
-"""Record that a named place could not be searched, and why. Usage: python3 tools/declare.py "<place>" "<reason>"
+"""Record that named places could not be searched, and why.
+Usage: python3 tools/declare.py "<place>" "<reason>"
+       python3 tools/declare.py --places "<reason>" "<place>" "<place>" ...      (several places, one reason)
+       python3 tools/declare.py --cloud-defaults                                  (the five places a cloud session never offers)
 The reason must be one of the allowed reasons. A place that was already searched successfully cannot be declared unavailable."""
 import os
 import sys
@@ -8,27 +11,39 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / ".claude" / "hoo
 os.environ.setdefault("CLAUDE_PROJECT_DIR", str(Path(__file__).resolve().parent.parent))
 from lib import *  # noqa: E402
 
-if len(sys.argv) != 3:
-    print('Usage: python3 tools/declare.py "<place>" "<reason>"')
-    sys.exit(1)
-place, reason = sys.argv[1], sys.argv[2]
 cfg = load_config()
+args = sys.argv[1:]
+if args[:1] == ["--cloud-defaults"] and len(args) == 1:
+    reason, places = "not offered in this session", list(cfg.get("cloud_unavailable_places", []))
+elif args[:1] == ["--places"] and len(args) >= 3:
+    reason, places = args[1], args[2:]
+elif len(args) == 2:
+    places, reason = [args[0]], args[1]
+else:
+    print(__doc__)
+    sys.exit(1)
 sid = os.environ.get("CLAUDE_SESSION_ID")
 if not sid:
     print("No session id is available, so this cannot be recorded. Tell the owner.")
     sys.exit(1)
-if place not in cfg["required_places"] + cfg["extra_places"]:
-    print("Unknown place. Allowed: " + "; ".join(cfg["required_places"] + cfg["extra_places"]))
-    sys.exit(1)
 if not any(reason.lower().startswith(r) for r in cfg["unavailable_reasons_allowed"]):
     print("Reason not allowed. Use one of: " + "; ".join(cfg["unavailable_reasons_allowed"]))
     sys.exit(1)
+known = cfg["required_places"] + cfg["extra_places"]
 st = load_state(sid)
 turn = int(st.get("turn", 0))
 scope_turn = cfg.get("search_scope") == "turn"
-for r in read_log(sid):
-    if r.get("event") == "tool" and r.get("ok") and place in r.get("places", []) and (not scope_turn or r.get("turn") == turn):
+code = 0
+for place in places:
+    if place not in known:
+        print(f"Unknown place: {place}. Allowed: " + "; ".join(known))
+        code = 1
+        continue
+    if any(r.get("event") == "tool" and r.get("ok") and place in r.get("places", []) and (not scope_turn or r.get("turn") == turn)
+           for r in read_log(sid)):
         print(f"{place} was already searched successfully this {'reply' if scope_turn else 'session'}. List it under Searched, not under Couldn't search.")
-        sys.exit(1)
-append_declared(sid, place, reason, turn)
-print(f"Recorded: {place} - {reason}")
+        code = 1
+        continue
+    append_declared(sid, place, reason, turn)
+    print(f"Recorded: {place} - {reason}")
+sys.exit(code)

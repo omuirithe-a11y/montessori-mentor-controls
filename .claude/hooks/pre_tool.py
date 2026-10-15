@@ -174,7 +174,7 @@ if tool in ("Edit", "Write", "NotebookEdit"):
 if tool == "Bash" or tool.endswith("device_bash"):
     cmd = str(ti.get("command", ""))
     SANCTIONED = re.compile(
-        r"""^\s*python3?\s+(\"?\$CLAUDE_PROJECT_DIR\"?/|\./)?(tools/(declare|search|preview_gate|measure_spacing|check_wording|size_alarm)\.py|tests/prove_it_bites\.py)(\s+[^;&|><`$]*)?\s*$""")
+        r"""^\s*python3?\s+(\"?\$CLAUDE_PROJECT_DIR\"?/|\./|\"?\$HOME\"?/\.mm-controls/|~/\.mm-controls/)?(tools/(declare|search|preview_gate|measure_spacing|check_wording|size_alarm)\.py|tests/prove_it_bites\.py)(\s+[^;&|><`$]*)?\s*$""")
     if tool == "Bash" and SANCTIONED.match(cmd):
         allow_silently()
 
