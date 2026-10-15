@@ -236,6 +236,31 @@ if oc.get("enabled"):
         problems.append(f'The reply mentions "{term}", a topic the owner told you to drop ({o["id"]}, {o["date"]}: "{o["words"][:160]}"). '
                         "Remove it. Do not mention it again, not even to say you will not.")
 
+# (14) measure, do not judge (owner's order of 15 Oct 2026, O6): a rating, an estimate, a percentage or an opinion is refused unless a measuring tool
+# ran in this same reply and the reply reports a figure that tool printed
+mc = cfg.get("measure", {})
+if mc.get("enabled") and turn > 0:
+    judged = re.search(mc.get("judgement_regex", "$^"), uq)
+    if judged:
+        cmd_re = re.compile(mc.get("measuring_commands_regex", "$^"))
+        tool_re = re.compile(mc.get("measuring_tool_names_regex", "$^"))
+        this_turn = [r for r in log if r.get("turn") == turn and r.get("ok")]
+        measured = [r for r in this_turn if tool_re.search(str(r.get("tool", "")))
+                    or (r.get("tool") == "Bash" and any(cmd_re.search(str(t)) for t in r.get("targets", [])[1:]))]
+        if not measured:
+            problems.append(f'The reply gives a judgement ("{judged.group(0)}"). Measure instead: run a measuring tool in this reply (for example python3 tests/prove_it_bites.py, '
+                            'python3 tools/measure_spacing.py, python3 tools/check_wording.py, python3 tools/size_alarm.py, wc, grep -c, git diff --stat, or a GitHub Actions lookup), '
+                            "then replace the judgement with the figure it printed.")
+        else:
+            fig_re = r"(?<![\w.])\d+(?:\.\d+)?(?![\w])"
+            need = int(mc.get("min_figure_digits", 2))
+            printed = {canon_number(m.group(0)) for r in measured for m in re.finditer(fig_re, str(r.get("result", "")))
+                       if len(re.sub(r"\D", "", m.group(0))) >= need}
+            reported = {canon_number(m.group(0)) for m in re.finditer(fig_re, body)}
+            if printed and not (printed & reported):
+                problems.append(f'The reply gives a judgement ("{judged.group(0)}") and a measuring tool ran, but the reply reports none of the figures it printed. '
+                                "State the measured figure (for example 167 of 168) in place of the judgement.")
+
 # (10) the independent reviewer: a second model compares the reply with this turn's tool log (owner's decision, 15 Oct 2026)
 rv = cfg.get("claim_reviewer", {})
 if not problems and rv.get("enabled") and not os.environ.get("MM_REVIEWER_DISABLE") and not os.environ.get("MM_REVIEWER") and body.strip():
