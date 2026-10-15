@@ -18,6 +18,8 @@ st["go_turn"] = st["turn"] if re.match(cfg["go_regex"], prompt) else st.get("go_
 st["push_ok_turn"] = st["turn"] if re.search(cfg["push_words_regex"], prompt) else st.get("push_ok_turn")
 words, content = words_from(prompt[:2000])
 st["search_content"] = content
+append_prompt(sid, st["turn"], prompt)  # the full text, in the session folder Claude cannot write to
+closed = close_from_prompt(prompt)
 save_state(sid, st)
 append_log(sid, {"turn": st["turn"], "event": "owner_message", "chars": len(prompt),
                  "go": st["go_turn"] == st["turn"], "push_words": st["push_ok_turn"] == st["turn"], "content_words": content})
@@ -31,6 +33,13 @@ lines = ["SEARCH FIRST, BEFORE WRITING A WORD OF THE REPLY (the owner's standing
          "3. In the reply, quote what was found word for word. Never say nothing was found while the search log holds matches.",
          "4. Do not ask about anything the settled list (controls/settled.json) already answers; use the answer.",
          "5. If a check blocks the reply, that is an instruction to go back and do the missing work, not a place to stop. Keep searching (wider words, more places, a fresh subagent) until the result can be shown. Never end with \"a check stopped me\"."]
+for q in closed:
+    lines.append(f"ANSWERED by the owner: {q['id']} -> option {q['answer']}: {q['answer_text']}  (their words are recorded in controls/decisions.json). Use the answer; do not ask again.")
+if not closed and re.search(r"(?i)\bQ\d+\b", prompt):
+    lines.append("The owner's message names a question but is not in the form 'Q<number>: <option number>' for an open question, so nothing was recorded. Ask them to answer by number only, for example Q4: 2.")
+oq = open_questions()
+if oq:
+    lines.append("STILL OPEN, nothing that depends on these may be built, previewed, sent, published or pushed: " + " | ".join(f"{q['id']}: {q['text']}" for q in oq))
 touched = settled_matches(prompt, load_settled()) if content else []
 if touched:
     lines.append("SETTLED DECISIONS THIS MESSAGE TOUCHES - use them, do not ask about them:")

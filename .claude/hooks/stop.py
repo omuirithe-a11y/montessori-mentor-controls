@@ -204,6 +204,25 @@ for sentence in re.split(r"(?<=[.!?])\s+|\n", plain):
             problems.append(f'The reply says "{name}" was made, but no file with that name exists on this computer. '
                             "Make the file (or find where it really is), then say so; never say a file exists that does not.")
 
+# (11) the reply cannot carry a decision (owner's decision of 15 Oct 2026)
+if re.search(cfg.get("choice_admission_regex", "$^"), uq):
+    problems.append("The reply admits making a choice (\"I chose\", \"I decided\", \"I assumed\", \"I picked\", \"my reading\"). A choice is the owner's: raise it as a question with "
+                    "python3 tools/ask.py \"<question>\" \"<option 1>\" \"<option 2>\" and put its text in the reply, instead of deciding.")
+approved = approved_numbers(sid)
+shown = {canon_number(m.group(1)) for m in re.finditer(r"(?<![\w.#])(\d+(?:\.\d+)?)\s*px\b", uq)}
+shown |= {canon_number(m.group(1)) for m in re.finditer(r"(?<![\w.#])(\d+(?:\.\d+)?)\s+(?:above|below|apart|high|wide|tall)\b", uq)}
+unapproved = sorted(n for n in shown if n not in approved and n not in {canon_number(x) for x in cfg.get("gate_always_allowed", [])})
+if unapproved:
+    problems.append("The reply gives measurements (" + ", ".join(unapproved) + ") that are not an approved figure and not in the owner's words. "
+                    "Do not decide them: raise the question with python3 tools/ask.py \"<question>\" \"<option 1>\" \"<option 2>\" and put its text in the reply.")
+body_norm_all = " " + normalise_quote(body) + " "
+for q in read_register()["questions"]:
+    if q.get("raised_session") == safe_id(sid) and q.get("raised_turn") == turn:
+        want = [q["text"]] + list(q["options"])
+        if not all(" " + normalise_quote(w) + " " in body_norm_all for w in want):
+            block = f"{q['id']}. {q['text']}\n" + "\n".join(f"{i}. {o}" for i, o in enumerate(q["options"], 1)) + f"\nAnswer with: {q['id']}: <number>"
+            problems.append(f"A question was raised this turn ({q['id']}), so the reply must contain it, with its options numbered exactly as recorded, and nothing else must be built. Put this in the reply:\n{block}")
+
 # (10) the independent reviewer: a second model compares the reply with this turn's tool log (owner's decision, 15 Oct 2026)
 rv = cfg.get("claim_reviewer", {})
 if not problems and rv.get("enabled") and not os.environ.get("MM_REVIEWER_DISABLE") and not os.environ.get("MM_REVIEWER") and body.strip():

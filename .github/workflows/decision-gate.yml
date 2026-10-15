@@ -1,0 +1,22 @@
+name: decision-gate
+
+# Every change, and once a week: refuse while the decision register holds an open question, or while START-HERE and the figures file disagree.
+# After merging, add "decision-gate" to the required checks on the main-locked ruleset (Settings, Rules).
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "41 3 * * 1"
+
+jobs:
+  decision-gate:
+    name: decision-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Open questions and figure agreement
+        run: python tools/decision_gate.py

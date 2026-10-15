@@ -29,6 +29,14 @@ A block is an instruction to go back and do the job, not a place to stop. The bl
 
 A reply that says a file was made is refused unless a file with that name exists. A phrase inside quotation marks, code or a block quote is not read as the reply's own words. A second model compares every reply with the tool log and names claims the log does not support; fix them, then finish. The five places a cloud session never offers are recorded with one command: python3 tools/declare.py --cloud-defaults
 
+# Decisions are the owner's (the owner's decision of 15 Oct 2026: A=1, B=2, C=1, D=1)
+
+A. A number on a page that did not come from the owner blocks the preview until the owner decides it.
+B. The heading map is asked as a question only when the Word file has no heading styles, or when the styles and the brief disagree.
+C. The owner answers a question by number only: Q4: 2. Anything else is not an answer.
+D. The register of questions and answers is controls/decisions.json in this repository. Only the automatic checks write it; GitHub's decision-gate check refuses to merge while a question is open.
+While a question is open nothing is built, previewed, sent, published or pushed. A reply may not say "I chose", "I decided", "I assumed", "I picked" or "my reading": raise the question instead.
+
 # The search itself (the owner's decision of 14 Oct 2026, enforced by the checks)
 
 Before anything is written: python3 tools/search.py  (no arguments: it searches this repository and records/ with the words of the owner's message, and prints them). Then Google Drive, Artifacts, Claude docs and Skills are searched with the same words; the Drive query must carry one of them.

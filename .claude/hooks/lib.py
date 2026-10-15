@@ -464,3 +464,145 @@ def deny(reason: str):
 
 def ask(reason: str):
     decide("ask", reason)
+
+
+# ---------------------------------------------------------------- the decision register and the owner's words (owner's decision of 15 Oct 2026)
+REGISTER_REL = "controls/decisions.json"
+REGISTER_ABOUT = ("Every question Claude has put to the owner and every answer. Only the automatic checks write this file: a question is raised with "
+                  "tools/ask.py and closed only by the owner's typed message ('Q4: 2'). While any question is open nothing is built, previewed, sent, "
+                  "published or pushed.")
+ANSWER_RE = re.compile(r"(?<![A-Za-z0-9])Q(\d+)\s*:\s*(\d+)(?!\d)", re.I)
+
+
+def register_path() -> Path:
+    return project_dir() / REGISTER_REL
+
+
+def read_register() -> dict:
+    try:
+        d = json.loads(register_path().read_text(encoding="utf-8"))
+        if isinstance(d, dict) and isinstance(d.get("questions"), list):
+            return d
+    except Exception:
+        pass
+    return {"version": 1, "about": REGISTER_ABOUT, "questions": []}
+
+
+def write_register(d: dict) -> None:
+    p = register_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(".tmp")
+    tmp.write_text(json.dumps(d, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    os.replace(tmp, p)
+
+
+def open_questions() -> list:
+    return [q for q in read_register()["questions"] if q.get("status") == "open"]
+
+
+def raise_question(text: str, options: list, session_id, turn: int) -> dict:
+    d = read_register()
+    nums = [int(re.sub(r"\D", "", str(q.get("id", "Q0"))) or 0) for q in d["questions"]]
+    q = {"id": "Q" + str(max(nums + [0]) + 1), "text": text.strip(), "options": [o.strip() for o in options], "status": "open",
+         "raised": time.strftime("%Y-%m-%d"), "raised_session": safe_id(session_id), "raised_turn": turn,
+         "answer": None, "answer_text": None, "answered_words": None, "answered": None}
+    d["questions"].append(q)
+    write_register(d)
+    return q
+
+
+def close_from_prompt(prompt: str) -> list:
+    """Only the owner's typed message can close a question, and only as 'Q<number>: <option number>' (decision C=1)."""
+    d = read_register()
+    closed = []
+    for m in ANSWER_RE.finditer(prompt or ""):
+        qid, n = "Q" + m.group(1), int(m.group(2))
+        for q in d["questions"]:
+            if q.get("id") == qid and q.get("status") == "open" and 1 <= n <= len(q.get("options", [])):
+                q.update(status="answered", answer=n, answer_text=q["options"][n - 1], answered_words=prompt, answered=time.strftime("%Y-%m-%d"))
+                closed.append(q)
+    if closed:
+        write_register(d)
+    return closed
+
+
+def register_ok_against(base_text: str, local_text: str) -> list:
+    """The local register may differ from the approved one only by added questions and by answers to open ones."""
+    problems = []
+    try:
+        base = {q["id"]: q for q in json.loads(base_text).get("questions", [])} if base_text.strip() else {}
+        local = {q["id"]: q for q in json.loads(local_text).get("questions", [])} if local_text.strip() else {}
+    except Exception:
+        return ["the register is not readable"]
+    for qid, b in base.items():
+        l = local.get(qid)
+        if l is None:
+            problems.append(f"{qid} was removed")
+            continue
+        for k in ("text", "options", "raised"):
+            if l.get(k) != b.get(k):
+                problems.append(f"{qid} {k} was changed")
+        if b.get("status") == "answered" and (l.get("status") != "answered" or l.get("answer") != b.get("answer") or l.get("answered_words") != b.get("answered_words")):
+            problems.append(f"{qid} answer was changed")
+    return problems
+
+
+def append_prompt(session_id, turn: int, prompt: str) -> None:
+    with open(state_dir(session_id) / "prompts.jsonl", "a", encoding="utf-8") as f:
+        f.write(json.dumps({"turn": turn, "prompt": prompt, "ts": round(time.time(), 1)}, ensure_ascii=False) + "\n")
+
+
+def read_prompts(session_id) -> list:
+    p = state_dir(session_id) / "prompts.jsonl"
+    out = []
+    if p.exists():
+        for line in p.read_text(encoding="utf-8").splitlines():
+            try:
+                out.append(json.loads(line))
+            except Exception:
+                pass
+    return out
+
+
+def canon_number(x) -> str:
+    f = float(x)
+    return str(int(f)) if f == int(f) else str(f)
+
+
+def numbers_in(text: str) -> set:
+    return {canon_number(n) for n in re.findall(r"(?<![\w.#])(\d+(?:\.\d+)?)", text or "")}
+
+
+def figure_lines() -> dict:
+    """START-HERE's numbered design-figure lines: {figure number: text}."""
+    out = {}
+    try:
+        txt = (project_dir() / "controls" / "START-HERE.md").read_text(encoding="utf-8")
+        sect = txt.split("## Design figures", 1)[1].split("Two kinds of page", 1)[0]
+        for m in re.finditer(r"^(\d+)\. (.+)$", sect, re.M):
+            out[int(m.group(1))] = m.group(2)
+    except Exception:
+        pass
+    return out
+
+
+def approved_numbers(session_id=None) -> set:
+    """Numbers the owner has approved: the figures file, START-HERE's figure lines, answered questions, and (with a session) the owner's own messages."""
+    nums = set()
+    try:
+        figs = json.loads((project_dir() / "controls" / "design-figures.json").read_text(encoding="utf-8"))
+        for f in figs.get("figures", []):
+            if f.get("expected") is not None:
+                nums.add(canon_number(f["expected"]))
+            nums |= numbers_in(f.get("text", ""))
+    except Exception:
+        pass
+    for t in figure_lines().values():
+        nums |= numbers_in(t)
+    for q in read_register()["questions"]:
+        if q.get("status") == "answered":
+            nums |= numbers_in(q.get("answer_text", ""))
+    if session_id:
+        for p in read_prompts(session_id):
+            nums |= numbers_in(p.get("prompt", ""))
+    return nums

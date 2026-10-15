@@ -38,6 +38,11 @@
     "blocked by a control"
   ],
   "max_blocks_per_reply": 60,
+  "page_dir_regex": "(^|/)pages?/",
+  "choice_admission_regex": "(?i)\\b(I (chose|decided|assumed|picked|went with|took (this|that|it) to mean)|my reading)\\b",
+  "gate_always_allowed": [0, 1, 100],
+  "gate_spacing_properties": "margin|margin-top|margin-bottom|margin-left|margin-right|padding|padding-top|padding-bottom|padding-left|padding-right|gap|row-gap|column-gap|line-height|font-size|width|height|min-width|min-height|max-width|max-height|text-indent|letter-spacing|top|bottom|left|right",
+  "conflict_context_regex": "(?i)\\b(above|below|apart|wide|high|tall|indent|indented|spacing|space|between|px)\\b",
   "ceiling_extra_blocks": 5,
   "min_drive_queries_for_not_found": 3,
   "cloud_unavailable_places": [
