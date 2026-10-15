@@ -35,7 +35,7 @@ except SystemExit:
     print(__doc__)
     sys.exit(1)
 
-sid = os.environ.get("CLAUDE_SESSION_ID")
+sid = current_session_id()
 if not sid:
     print("No session id is available, so the brief cannot be filed. Tell the owner.")
     sys.exit(1)

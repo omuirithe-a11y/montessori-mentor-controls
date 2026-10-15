@@ -63,7 +63,7 @@ def files():
 
 def main():
     cfg = load_config()
-    sid = os.environ.get("CLAUDE_SESSION_ID")
+    sid = current_session_id()
     if not sid:
         print("No session id is available, so the search cannot be recorded. Tell the owner.")
         sys.exit(1)
