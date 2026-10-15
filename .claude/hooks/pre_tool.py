@@ -16,6 +16,17 @@ turn = int(st.get("turn", 0))
 root = project_dir()
 HOME = str(Path.home())
 
+import lib as _lib  # noqa: E402
+
+
+def _log_decision(decision, reason):
+    """Every refusal and every click asked for goes in the log, so a refused attempt is visible to the reviewer and to the owner."""
+    append_log(sid, {"turn": turn, "event": "decision", "tool": tool, "decision": decision,
+                     "targets": targets_for(tool, ti)[:3], "reason": str(reason)[:200]})
+
+
+_lib.DECISION_HOOK = _log_decision
+
 
 # ------------------------------------------------------------------ path helpers
 def norm(path: str) -> str:
@@ -227,7 +238,13 @@ if tool == "Bash" or tool.endswith("device_bash"):
         if not push_words_given():
             deny("Not allowed: saving to GitHub only happens when you ask for it by name (say push, commit or GitHub). "
                  "\"Save this\" means a download link, never GitHub.")
-        change("Claude wants to send changes to GitHub. You asked for GitHub in your last message. Approve only if that is what you meant.")
+        # Owner's decision of 15 Oct 2026: while the integrity warning is on (the branch's own check changes are not merged yet), a plain push of a
+        # branch other than main is still allowed, with the owner's click. GitHub's lock on main (pull request, the owner's review, the required
+        # checks) is what protects the approved version. Anything else (main, force, delete, several refs) is still refused.
+        m_push = re.match(r"^\s*git\s+push\s+(?:-u\s+|--set-upstream\s+)?origin\s+([A-Za-z0-9][A-Za-z0-9._/-]*)\s*$", cmd)
+        plain_branch_push = bool(m_push) and m_push.group(1) not in ("main", "master", "HEAD")
+        change("Claude wants to send changes to GitHub. You asked for GitHub in your last message. Approve only if that is what you meant.",
+               control=plain_branch_push)
 
     if read_only:
         allow_silently()

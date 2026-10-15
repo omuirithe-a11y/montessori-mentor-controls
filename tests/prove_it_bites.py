@@ -281,6 +281,32 @@ def run():
     rc, out, _ = stop_with(s10, good9, "rv_crash.py")
     expect("a reviewer that cannot run does not block the reply", (out or {}).get("decision") != "block", reason_of(out))
 
+    # ---- 6d. the integrity warning no longer blocks the work that repairs the checks (owner's decision, 15 Oct 2026)
+    def set_state(sess, **kw):
+        sp = TMP / ".session" / sess.sid / "state.json"
+        d = json.loads(sp.read_text())
+        d.update(kw)
+        sp.write_text(json.dumps(d))
+    sp1 = Sess("push the branch to GitHub"); sp1.satisfy(); set_state(sp1, tampered=True)
+    out = sp1.pre("Bash", {"command": "git push -u origin feature-x"})[1]
+    expect("with the integrity warning on, pushing a branch other than main still asks the owner", decision(out) == "ask", reason(out))
+    expect("with the integrity warning on, pushing main is refused", decision(sp1.pre("Bash", {"command": "git push origin main"})[1]) == "deny")
+    expect("with the integrity warning on, a forced push is refused", decision(sp1.pre("Bash", {"command": "git push --force origin feature-x"})[1]) == "deny")
+    expect("with the integrity warning on, chaining a push with other commands is refused", decision(sp1.pre("Bash", {"command": "git push origin feature-x && rm -rf x"})[1]) == "deny")
+    sp2 = Sess("hello"); set_state(sp2, tampered=True)
+    expect("with the integrity warning on, git ls-remote is allowed as a read-only lookup", decision(sp2.pre("Bash", {"command": "git ls-remote --heads origin feature-x"})[1]) is None)
+    sp3 = Sess()
+    sp3.pre("Bash", {"command": "gh api repos/a/b/issues -X POST"})
+    logged_d = [json.loads(l) for l in (TMP / ".session" / sp3.sid / "log.jsonl").read_text().splitlines() if '"decision"' in l]
+    expect("a refused attempt is written to the log", any(r.get("event") == "decision" and r.get("decision") == "deny" for r in logged_d), str(logged_d))
+    (TMP / "rv_echo.py").write_text('import sys\nopen(sys.argv[1], "w").write(sys.stdin.read())\nprint(\'{"unsupported": []}\')\n')
+    sp4 = Sess(); sp4.satisfy()
+    sp4.pre("Bash", {"command": "gh api repos/a/b/issues -X POST"})
+    seen = TMP / "rv_seen.txt"
+    hook("stop", dict(sp4.base, hook_event_name="Stop", last_assistant_message="Answer." + foot_all),
+         env_extra={"MM_REVIEWER_DISABLE": "", "MM_REVIEWER_CMD": f"python3 {TMP / 'rv_echo.py'} {seen}"})
+    expect("the reviewer is shown the refused attempts", seen.exists() and "did not run" in seen.read_text() and "issues" in seen.read_text(), seen.read_text()[-300:] if seen.exists() else "no file")
+
     # ---- 6b. the log keeps a short excerpt of what each tool printed, so the reviewer can check claims about results
     s11 = Sess()
     s11.post("Bash", {"command": "git log --oneline -1"}, {"stdout": "aeca4fb a commit message"})

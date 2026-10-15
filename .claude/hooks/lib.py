@@ -321,7 +321,7 @@ READ_ONLY_CMD = re.compile(
     r"sha256sum|shasum|md5sum|date|env|printenv|whoami|test|\[|true|false|sed\s+-n|awk|jq|column|basename|dirname|realpath|"
     r"gh\s+(pr|issue|run|repo|release|workflow|auth)\s+(list|view|diff|checks|status)\b|"
     r"gh\s+api\b(?!.*(\s-X\b|--method|\s-f\b|\s-F\b|--field|--raw-field|--input))|"
-    r"git\s+(status|log|diff|show|ls-files|branch|rev-parse|remote|fetch|grep|blame|describe|shortlog|count-objects|config\s+--get)|"
+    r"git\s+(status|log|diff|show|ls-files|ls-remote|rev-list|cherry|merge-base|branch|rev-parse|remote|fetch|grep|blame|describe|shortlog|count-objects|config\s+--get)|"
     r"python3?\s+-[cI]*\s*['\"]?\s*(print|import json))",
     re.I,
 )
@@ -443,7 +443,15 @@ def allow_silently():
     sys.exit(0)
 
 
+DECISION_HOOK = None  # set by pre_tool.py: records every refusal and every click asked for, so the reviewer can see refused attempts
+
+
 def decide(decision: str, reason: str):
+    if DECISION_HOOK:
+        try:
+            DECISION_HOOK(decision, reason)
+        except Exception:
+            pass
     print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
                                               "permissionDecision": decision,
                                               "permissionDecisionReason": reason}}))

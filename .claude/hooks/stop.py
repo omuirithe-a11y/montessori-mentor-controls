@@ -215,6 +215,9 @@ if not problems and rv.get("enabled") and not os.environ.get("MM_REVIEWER_DISABL
         tg = "; ".join(str(t)[:110] for t in r.get("targets", [])[:3])
         res_txt = f"  => {r['result']}" if r.get("result") else ""
         events.append(f"- {r.get('places') or ''} {'ok' if r.get('ok') else 'FAILED'}: {tg}{res_txt}")
+    for d in [r for r in read_log(sid) if r.get("event") == "decision" and use(r)][-30:]:
+        tg = "; ".join(str(t)[:110] for t in d.get("targets", [])[:3])
+        events.append(f"- {str(d.get('decision', '')).upper()} (a refused or clicked-for attempt that did not run): {d.get('tool', '')} {tg} => {d.get('reason', '')}")
     prompt = ("You are an independent auditor. Below are (A) an assistant's final reply to its owner and (B) the log of every tool call "
               "the assistant made this turn. List each statement in A that claims something was searched, found, read, created, sent, "
               "fixed, verified, counted or merged where B gives no support for it. Ignore opinions, plans, offers and questions. "
