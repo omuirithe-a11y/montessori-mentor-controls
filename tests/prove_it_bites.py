@@ -513,6 +513,14 @@ def run():
     r = sh("python3", str(TMP / "tools" / "declare.py"), "--cloud-defaults", env=env_no_id)
     expect("a session id left more than 12 hours ago is not used", "No session id" in r.stdout and r.returncode == 1, r.stdout)
 
+    # ---- 7c. CLAUDE.md tells Claude what to say when the start check never ran (owner's decision of 15 Oct 2026)
+    claude_md = (TMP / "CLAUDE.md").read_text()
+    start_py = (TMP / ".claude" / "hooks" / "session_start.py").read_text()
+    expect("CLAUDE.md names both start-check messages exactly as the start check prints them",
+           "The automatic checks are intact and switched on." in claude_md and "The automatic checks are intact and switched on." in start_py
+           and "INTEGRITY FAILURE" in claude_md and "INTEGRITY FAILURE" in start_py)
+    expect("CLAUDE.md says what to do if neither message is there", "If neither is there" in claude_md and "new session inside the repository" in claude_md)
+
     # ---- 8. integrity at session start
     s = Sess()
     rc, out, _ = hook("session_start", dict(s.base, hook_event_name="SessionStart", source="startup"))
