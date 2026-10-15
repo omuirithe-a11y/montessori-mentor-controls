@@ -18,7 +18,7 @@ Searched: <places searched this turn, from the list above>
 Couldn't search: <place> - <reason>; <place> - <reason>   (or: none)
 Looked at: <what you looked at, separated by semicolons>   (required whenever the reply says checked, verified, done, matches, measured, tested, fixed)
 
-Allowed reasons for "Couldn't search": not offered in this session; tool call failed; not linked to this computer; blocked by a control.
+Allowed reasons for "Couldn't search": not offered in this session; tool call failed; not linked to this computer; blocked by a control; no doc exists to open (this last one only for Claude docs, added at the owner's request on 15 Oct 2026: the Claude docs tools open one named doc and cannot search, so when there is no doc to open, that is the reason).
 If a place is not offered in this session, record it once with: python3 tools/declare.py "<place>" "<reason>"
 
 # When a check blocks (the owner's decision of 15 Oct 2026)

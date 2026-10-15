@@ -34,7 +34,7 @@ for pat in (".claude/hooks/*", ".claude/settings.json", "controls/*", "tools/*",
 
 compare_with = "origin/main"
 try:
-    r = git("fetch", "origin", "main", "--depth=1")
+    r = git("fetch", "origin", "+main:refs/remotes/origin/main", "--depth=1")  # an explicit target, so a one-branch clone never compares with a stale origin/main
     if r.returncode != 0:
         compare_with = "HEAD"
         notes.append("Could not reach GitHub to compare; compared with the last saved version on this computer instead.")

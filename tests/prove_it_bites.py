@@ -521,6 +521,28 @@ def run():
            and "INTEGRITY FAILURE" in claude_md and "INTEGRITY FAILURE" in start_py)
     expect("CLAUDE.md says what to do if neither message is there", "If neither is there" in claude_md and "new session inside the repository" in claude_md)
 
+    # ---- 7d. the reviewer sees more of each result, start and end (owner's request, 15 Oct 2026), and the start check compares with the real main
+    sr = Sess("long result"); sr.satisfy()
+    sr.post("Glob", {"pattern": "x"}, "START " + "A" * 4000 + " ENDMARK")
+    rec = [json.loads(l) for l in (TMP / ".session" / sr.sid / "log.jsonl").read_text().splitlines() if '"tool": "Glob"' in l][-1]
+    expect("a long tool result is logged with its start and its end, up to the configured size",
+           rec["result"].startswith("START") and rec["result"].endswith("ENDMARK") and 1000 < len(rec["result"]) <= 2600, str(len(rec["result"])))
+    expect("the reviewer's size is set in the config, not fixed in the code", json.loads((TMP / "controls" / "config.json").read_text())["claim_reviewer"]["result_chars"] >= 2000)
+    expect("the start check fetches main into origin/main explicitly, so a one-branch clone is never compared with a stale copy",
+           '"+main:refs/remotes/origin/main"' in (TMP / ".claude" / "hooks" / "session_start.py").read_text())
+
+    # ---- 7e. a failed tool call keeps its reason for the reviewer
+    hook("post_tool", dict(sr.base, hook_event_name="PostToolUseFailure", tool_name="Glob", tool_input={"pattern": "y"}, error="deny unrouted reason XYZ"))
+    recf = [json.loads(l) for l in (TMP / ".session" / sr.sid / "log.jsonl").read_text().splitlines() if '"tool": "Glob"' in l][-1]
+    expect("a failed tool call is logged as failed, with the reason it gave", recf["ok"] is False and "unrouted reason XYZ" in recf["result"], str(recf))
+
+    # ---- 7f. "no doc exists to open" is a valid reason for Claude docs only (owner's decision of 15 Oct 2026)
+    sd = Sess("a plain message"); sd.satisfy(skip=("mcp__Claude_Docs__query",))
+    r = sh("python3", str(TMP / "tools" / "declare.py"), "Claude docs", "no doc exists to open", env=sd.env())
+    expect("'no doc exists to open' is accepted as the reason for Claude docs", r.returncode == 0 and "Recorded: Claude docs" in r.stdout, r.stdout)
+    r = sh("python3", str(TMP / "tools" / "declare.py"), "Folders", "no doc exists to open", env=sd.env())
+    expect("the same reason does not excuse any other place", r.returncode == 1 and "only allowed for: Claude docs" in r.stdout, r.stdout)
+
     # ---- 8. integrity at session start
     s = Sess()
     rc, out, _ = hook("session_start", dict(s.base, hook_event_name="SessionStart", source="startup"))
