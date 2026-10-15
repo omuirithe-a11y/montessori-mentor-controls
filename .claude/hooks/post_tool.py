@@ -14,8 +14,10 @@ rec = {"turn": st.get("turn", 0), "event": "tool", "tool": tool, "ok": not faile
        "places": places, "targets": targets_for(tool, ti)}
 
 
-def excerpt(resp, limit=700):
-    """A short, flat excerpt of what the tool printed, so the independent reviewer can check claims about results."""
+def excerpt(resp, limit=None):
+    """A flat excerpt of what the tool printed (the start and the end, where ids and links usually are), so the independent reviewer can check claims about results.
+    The size is claim_reviewer.result_chars in controls/config.json (owner's request, 15 Oct 2026: let the reviewer see more)."""
+    limit = limit or int(cfg.get("claim_reviewer", {}).get("result_chars", 2500))
     if isinstance(resp, dict):
         resp = resp.get("stdout") or resp.get("output") or resp.get("content") or resp.get("text") or json.dumps(resp, ensure_ascii=False)
     if isinstance(resp, list):
@@ -24,7 +26,7 @@ def excerpt(resp, limit=700):
     return s if len(s) <= limit else s[:limit // 2] + " ... " + s[-limit // 2:]
 
 
-rec["result"] = excerpt(ev.get("tool_response"))
+rec["result"] = excerpt(ev.get("tool_response") or ev.get("error"))  # a failed call carries its reason in "error"
 append_log(sid, rec)
 
 sys.exit(0)

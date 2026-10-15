@@ -35,8 +35,10 @@
     "not offered in this session",
     "tool call failed",
     "not linked to this computer",
-    "blocked by a control"
+    "blocked by a control",
+    "no doc exists to open"
   ],
+  "reason_only_for": {"no doc exists to open": ["Claude docs"]},
   "max_blocks_per_reply": 60,
   "page_dir_regex": "(^|/)pages?/",
   "choice_admission_regex": "(?i)\\b(I (chose|decided|assumed|picked|went with|took (this|that|it) to mean)|my reading)\\b",
@@ -60,6 +62,8 @@
     "command": ["claude", "-p", "--model", "haiku", "--no-session-persistence", "--disable-slash-commands"],
     "timeout_seconds": 90,
     "max_blocks_per_reply": 2,
+    "result_chars": 2500,
+    "log_chars_total": 120000,
     "note": "A second model reads the reply and this turn's tool log and names claims the log does not support. If it cannot run, the reply is not blocked on its account (it is logged)."
   },
   "stop_excuse_regex": "(?i)(\\bI (will |'ll |must |have to )?stop here\\b|\\b(gate|hook|hooks|check|checks|control|controls) (has |have )?(stopped|blocked|prevented|refused) me\\b|\\bI (can'?t|cannot|am unable to|am not able to) (go on|continue|proceed|carry on)\\b|\\bI have stopped\\b|\\bfull stop\\b)",

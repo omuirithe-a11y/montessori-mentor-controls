@@ -239,6 +239,13 @@ if not problems and rv.get("enabled") and not os.environ.get("MM_REVIEWER_DISABL
         note = ("refused, so it did not run" if str(d.get("decision", "")).lower() == "deny"
                 else "asked for the owner's approval; it may have run afterwards, so look for the same call in the lines above")
         events.append(f"- {str(d.get('decision', '')).upper()} ({note}): {d.get('tool', '')} {tg} => {d.get('reason', '')}")
+    budget, kept = int(rv.get("log_chars_total", 120000)), []
+    for line in reversed(events):  # the newest events first; the oldest drop out when the log is long
+        budget -= len(line)
+        if budget < 0:
+            break
+        kept.append(line)
+    events = list(reversed(kept))
     prompt = ("You are an independent auditor. Below are (A) an assistant's final reply to its owner and (B) the log of every tool call "
               "the assistant made this turn. List each statement in A that claims something was searched, found, read, created, sent, "
               "fixed, verified, counted or merged where B gives no support for it. Ignore opinions, plans, offers and questions. "

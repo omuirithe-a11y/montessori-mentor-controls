@@ -39,6 +39,11 @@ for place in places:
         print(f"Unknown place: {place}. Allowed: " + "; ".join(known))
         code = 1
         continue
+    only_for = next((v for k, v in cfg.get("reason_only_for", {}).items() if reason.lower().startswith(k)), None)
+    if only_for is not None and place not in only_for:
+        print(f'The reason "{reason}" is only allowed for: ' + "; ".join(only_for) + f". It does not excuse {place}.")
+        code = 1
+        continue
     if any(r.get("event") == "tool" and r.get("ok") and place in r.get("places", []) and (not scope_turn or r.get("turn") == turn)
            for r in read_log(sid)):
         print(f"{place} was already searched successfully this {'reply' if scope_turn else 'session'}. List it under Searched, not under Couldn't search.")
