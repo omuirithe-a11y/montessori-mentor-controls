@@ -66,6 +66,14 @@
     "log_chars_total": 120000,
     "note": "A second model reads the reply and this turn's tool log and names claims the log does not support. If it cannot run, the reply is not blocked on its account (it is logged)."
   },
+  "orders": {
+    "enabled": true,
+    "drop_regex": "(?i)(\\b(don'?t|do not|never|stop|quit|no more)\\s+(\\w+\\s+){0,3}(mention(ing)?|bring(ing)? up|rais(e|ing)|talk(ing)? about|say(ing)?|remind(ing)?)\\b|\\bnot to (mention|bring up|raise|talk about|remind)\\b|\\bnever\\b[^.!?\\n]{0,60}\\bagain\\b|\\bdrop (it|that|this|the)\\b|\\bleave (it|that|this) (alone|out)\\b)",
+    "shown_recent": 12,
+    "reviewer_enabled": true,
+    "reviewer_max_blocks_per_reply": 2,
+    "note": "Owner's decision of 15 Oct 2026 (Q2, option 1). Every owner message is recorded word for word in controls/orders.json and shown to Claude at the start of each reply; a message that drops a topic must be followed by python3 tools/order.py drop \"<terms>\"; a reply containing a dropped term is refused; a second model compares each reply with the owner's latest message and the orders."
+  },
   "stop_excuse_regex": "(?i)(\\bI (will |'ll |must |have to )?stop here\\b|\\b(gate|hook|hooks|check|checks|control|controls) (has |have )?(stopped|blocked|prevented|refused) me\\b|\\bI (can'?t|cannot|am unable to|am not able to) (go on|continue|proceed|carry on)\\b|\\bI have stopped\\b|\\bfull stop\\b)",
   "forbidden_extensions": [
     ".docx",

@@ -20,6 +20,11 @@ words, content = words_from(prompt[:2000])
 st["search_content"] = content
 append_prompt(sid, st["turn"], prompt)  # the full text, in the session folder Claude cannot write to
 closed = close_from_prompt(prompt)
+oc = cfg.get("orders", {})
+is_drop = bool(oc.get("enabled")) and bool(re.search(oc.get("drop_regex", "$^"), prompt))
+if oc.get("enabled"):
+    record_order(sid, st["turn"], prompt, is_drop)
+st["drop_turn"] = st["turn"] if is_drop else st.get("drop_turn")
 save_state(sid, st)
 append_log(sid, {"turn": st["turn"], "event": "owner_message", "chars": len(prompt),
                  "go": st["go_turn"] == st["turn"], "push_words": st["push_ok_turn"] == st["turn"], "content_words": content})
@@ -33,6 +38,18 @@ lines = ["SEARCH FIRST, BEFORE WRITING A WORD OF THE REPLY (the owner's standing
          "3. In the reply, quote what was found word for word. Never say nothing was found while the search log holds matches.",
          "4. Do not ask about anything the settled list (controls/settled.json) already answers; use the answer.",
          "5. If a check blocks the reply, that is an instruction to go back and do the missing work, not a place to stop. Keep searching (wider words, more places, a fresh subagent) until the result can be shown. Never end with \"a check stopped me\"."]
+if oc.get("enabled"):
+    lines.insert(0, "THE OWNER'S LATEST MESSAGE, WORD FOR WORD - the reply must do what it asks, and nothing it forbids (the end-of-reply check compares them): " + prompt[:1500])
+    recent = [o for o in read_orders()["orders"] if not o.get("drop")][-int(oc.get("shown_recent", 12)):]
+    drops = [o for o in read_orders()["orders"] if o.get("drop") and o.get("active", True)]
+    if drops:
+        lines.append("TOPICS THE OWNER HAS TOLD YOU TO DROP - never mention them again, in any form (a reply containing a listed term is refused): "
+                     + " | ".join(f"{o['id']} ({o['date']}): terms {o.get('terms') or 'NOT YET RECORDED'} - the owner's words: {o['words'][:200]}" for o in drops))
+    if recent:
+        lines.append("THE OWNER'S RECENT ORDERS (word for word): " + " | ".join(f"{o['id']}: {o['words'][:200]}" for o in recent))
+    if is_drop:
+        lines.append("THIS MESSAGE DROPS A TOPIC. Before replying run: python3 tools/order.py drop \"<words the owner typed that name the topic>\" (one or more terms, copied exactly from the message). "
+                     "Then do not mention the topic again, not even to say you will not; the reply is refused if it does.")
 for q in closed:
     lines.append(f"ANSWERED by the owner: {q['id']} -> option {q['answer']}: {q['answer_text']}  (their words are recorded in controls/decisions.json). Use the answer; do not ask again.")
 if not closed and re.search(r"(?i)\bQ\d+\b", prompt):

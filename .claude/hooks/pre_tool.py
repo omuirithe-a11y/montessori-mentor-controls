@@ -63,7 +63,7 @@ def ext(path: str) -> str:
 def is_locked(path: str) -> bool:
     p = norm(path)
     r = rel(path)
-    if r == REGISTER_REL or any(r.startswith(x) for x in cfg["locked_paths"]):
+    if r in (REGISTER_REL, ORDERS_REL) or any(r.startswith(x) for x in cfg["locked_paths"]):
         return True
     if "/.claude/settings" in p or p.startswith(os.path.join(HOME, ".claude") + os.sep):
         return True
@@ -197,7 +197,7 @@ if tool in ("Edit", "Write", "NotebookEdit"):
 if tool == "Bash" or tool.endswith("device_bash"):
     cmd = str(ti.get("command", ""))
     SANCTIONED = re.compile(
-        r"""^\s*python3?\s+(\"?\$CLAUDE_PROJECT_DIR\"?/|\./|\"?\$HOME\"?/\.mm-controls/|~/\.mm-controls/)?(tools/(declare|search|ask|brief|preview_gate|measure_spacing|check_wording|size_alarm)\.py|tests/prove_it_bites\.py)(\s+[^;&|><`$]*)?\s*$""")
+        r"""^\s*python3?\s+(\"?\$CLAUDE_PROJECT_DIR\"?/|\./|\"?\$HOME\"?/\.mm-controls/|~/\.mm-controls/)?(tools/(declare|search|ask|order|brief|preview_gate|measure_spacing|check_wording|size_alarm)\.py|tests/prove_it_bites\.py)(\s+[^;&|><`$]*)?\s*$""")
     if tool == "Bash" and SANCTIONED.match(cmd):
         if re.search(r"tools/(preview_gate|brief)\.py", cmd):
             deny_if_open("issuing a preview receipt")
@@ -208,7 +208,7 @@ if tool == "Bash" or tool.endswith("device_bash"):
 
     read_only = bash_is_read_only(cmd)
 
-    locked_ref = re.search(r"(\.session/|controls/decisions\.json|settings\.local\.json|(~|\$HOME|/root|/home/[^/\s]+|/Users/[^/\s]+)/\.claude)", cmd)
+    locked_ref = re.search(r"(\.session/|controls/decisions\.json|controls/orders\.json|settings\.local\.json|(~|\$HOME|/root|/home/[^/\s]+|/Users/[^/\s]+)/\.claude)", cmd)
     if locked_ref and not read_only:
         deny("Not allowed: this would change the automatic checks' own records or settings.")
 

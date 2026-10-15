@@ -223,6 +223,19 @@ for q in read_register()["questions"]:
             block = f"{q['id']}. {q['text']}\n" + "\n".join(f"{i}. {o}" for i, o in enumerate(q["options"], 1)) + f"\nAnswer with: {q['id']}: <number>"
             problems.append(f"A question was raised this turn ({q['id']}), so the reply must contain it, with its options numbered exactly as recorded, and nothing else must be built. Put this in the reply:\n{block}")
 
+# (12) the owner's orders (owner's decision of 15 Oct 2026, Q2 option 1): a message that drops a topic must have its terms recorded,
+# and a reply containing a dropped term is refused
+oc = cfg.get("orders", {})
+if oc.get("enabled"):
+    if st.get("drop_turn") == turn:
+        mine = [o for o in read_orders()["orders"] if o.get("session") == safe_id(sid) and o.get("turn") == turn and o.get("drop")]
+        if mine and not any(o.get("terms") for o in mine):
+            problems.append("The owner's message drops a topic, but no term has been recorded. Run: python3 tools/order.py drop \"<words the owner typed that name the topic>\"  "
+                            "(copy the words exactly from the owner's message), then write the reply without mentioning the topic.")
+    for term, o in dropped_mentions(uq):
+        problems.append(f'The reply mentions "{term}", a topic the owner told you to drop ({o["id"]}, {o["date"]}: "{o["words"][:160]}"). '
+                        "Remove it. Do not mention it again, not even to say you will not.")
+
 # (10) the independent reviewer: a second model compares the reply with this turn's tool log (owner's decision, 15 Oct 2026)
 rv = cfg.get("claim_reviewer", {})
 if not problems and rv.get("enabled") and not os.environ.get("MM_REVIEWER_DISABLE") and not os.environ.get("MM_REVIEWER") and body.strip():
@@ -270,6 +283,44 @@ if not problems and rv.get("enabled") and not os.environ.get("MM_REVIEWER_DISABL
                             + ". Do the missing work (or remove the claim), then finish again.")
         else:
             append_log(sid, {"turn": turn, "event": "reviewer_overruled_after_tries", "unsupported": verdict["unsupported"][:5]})
+
+# (13) the second reviewer: does the reply do what the owner's latest message asked, and nothing the owner forbade? (Q2 option 1)
+_owner_msg = str(st.get("last_prompt", "")).strip()
+_is_request = len(_owner_msg.split()) >= 2 and not ANSWER_RE.fullmatch(_owner_msg)   # a bare answer ("Q2: 1") or an empty turn asks for nothing to compare with
+if not problems and _is_request and oc.get("enabled") and oc.get("reviewer_enabled") and not os.environ.get("MM_REVIEWER_DISABLE") and not os.environ.get("MM_REVIEWER") and body.strip():
+    import shlex
+    import subprocess
+    import tempfile
+    all_orders = read_orders()["orders"]
+    standing = [o for o in all_orders if o.get("drop") and o.get("active", True)]
+    o_prompt = ("You are an independent auditor of an assistant's reply to its owner. Below are (1) the owner's latest message, word for word, "
+                "(2) topics and instructions the owner gave earlier, and (3) the assistant's reply. Decide: (a) is there anything the latest message asks for "
+                "(an answer, an action report, a file, a link, a format) that the reply does not do or answer; (b) does the reply raise, repeat or remind about anything the "
+                "owner told the assistant to drop or not to mention, or add unrequested material the owner did not ask for; (c) does the reply ignore a standing instruction. "
+                "Do not judge quality, tone or facts. Required footer lines (Searched / Couldn't search / Looked at) are allowed. "
+                'Answer with only JSON: {"problems": ["<short quotation or request>: <what is missing or forbidden>"]} and an empty list when the reply obeys.\n\n'
+                "(1) LATEST MESSAGE:\n" + str(st.get("last_prompt", ""))[:2000]
+                + "\n\n(2) EARLIER INSTRUCTIONS TO DROP A TOPIC:\n" + ("\n".join(f"- {o['words'][:300]} (terms: {', '.join(o.get('terms', [])) or 'none recorded'})" for o in standing[-10:]) or "(none)")
+                + "\n\n(3) REPLY:\n" + body[:6000])
+    cmd = shlex.split(os.environ["MM_REVIEWER_CMD"]) if os.environ.get("MM_REVIEWER_CMD") else list(cfg.get("claim_reviewer", {}).get("command", []))
+    verdict = None
+    try:
+        res = subprocess.run(cmd, input=o_prompt, capture_output=True, text=True, timeout=int(cfg.get("claim_reviewer", {}).get("timeout_seconds", 90)),
+                             cwd=tempfile.gettempdir(), env=dict(os.environ, MM_REVIEWER="1"))
+        m = re.search(r"\{.*\}", res.stdout, re.S)
+        verdict = json.loads(m.group(0)) if m else None
+    except Exception as exc:
+        append_log(sid, {"turn": turn, "event": "orders_reviewer_unavailable", "why": str(exc)[:200]})
+    if isinstance(verdict, dict) and verdict.get("problems"):
+        n_or = int(st.setdefault("blocks", {}).get("orders", 0)) + 1
+        st["blocks"]["orders"] = n_or
+        save_state(sid, st)
+        if n_or <= int(oc.get("reviewer_max_blocks_per_reply", 2)):
+            problems.append("An independent reviewer compared the reply with the owner's latest message and the owner's earlier instructions and found: "
+                            + " | ".join(str(x)[:240] for x in verdict["problems"][:5])
+                            + ". Do what the owner's message asks and nothing it forbids, then finish again.")
+        else:
+            append_log(sid, {"turn": turn, "event": "orders_reviewer_overruled_after_tries", "problems": verdict["problems"][:5]})
 
 if not problems:
     sys.exit(0)

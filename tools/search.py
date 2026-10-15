@@ -52,6 +52,8 @@ def files():
             p = Path(dp) / fn
             if p.suffix.lower() not in TEXT_EXT or p.name.endswith(".pyc"):
                 continue
+            if (Path(dp) / fn).relative_to(root).as_posix() == "controls/orders.json":
+                continue   # a copy of every message the owner typed: it would only echo the owner's words back as "matches"
             try:
                 if p.stat().st_size > 1_000_000:
                     continue
